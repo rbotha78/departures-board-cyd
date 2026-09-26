@@ -204,7 +204,7 @@ In accordance with the **ShareAlike** requirements of the base project, inherite
 
 * **Attribution:** Credit belongs to the original creators of both repositories. 
 * **Non-Commercial:** This project is strictly for personal, non-commercial use. Reselling this software, or selling pre-assembled CYD boards pre-loaded with this software for commercial gain, is strictly prohibited under the terms of this license.
-* **ShareAlike:** Any further forks or modifications of this code must also be distributed under the same CC BY-NC-SA 4.0 license.
+* **ShareAlike:** Further forks or modifications of the CC BY-NC-SA-covered portions must also be distributed under the same CC BY-NC-SA 4.0 license; separately licensed third-party portions retain their applicable license terms.
 
 To view a copy of the full legal text for this license, visit [Creative Commons BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
