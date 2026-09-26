@@ -195,8 +195,8 @@ To set a custom time zone for the departure board clock, you will need to enter 
 This is a personal hobby fork that modifies the original departures board firmware to support the ESP32-2432S028R Cheap Yellow Display (CYD). 
 
 This project combines work from two sources:
-* **Base Firmware:** Inherited from [gadec-uk/departures-board](https://github.com), which is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0)**.
-* **CYD Hardware Configuration:** Display initialization, pin mappings, and community examples adapted from [witnessmenow/ESP32-Cheap-Yellow-Display](https://github.com), which is licensed under the **MIT License**.
+* **Base Firmware:** Inherited from [gadec-uk/departures-board](https://github.com/gadec-uk/departures-board), which is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0)**.
+* **CYD Hardware Configuration:** Display initialization, pin mappings, and community examples adapted from [witnessmenow/ESP32-Cheap-Yellow-Display](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), which is licensed under the **MIT License**.
 
 ### License Summary
 
@@ -206,4 +206,4 @@ In accordance with the **ShareAlike** requirements of the base project, this ent
 * **Non-Commercial:** This project is strictly for personal, non-commercial use. Reselling this software, or selling pre-assembled CYD boards pre-loaded with this software for commercial gain, is strictly prohibited under the terms of this license.
 * **ShareAlike:** Any further forks or modifications of this code must also be distributed under the same CC BY-NC-SA 4.0 license.
 
-To view a copy of the full legal text for this license, visit [Creative Commons BY-NC-SA 4.0](https://creativecommons.org).
+To view a copy of the full legal text for this license, visit [Creative Commons BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
