@@ -196,14 +196,40 @@ This is a personal hobby fork that modifies the original departures board firmwa
 
 This project combines work from two sources:
 * **Base Firmware:** Inherited from [gadec-uk/departures-board](https://github.com/gadec-uk/departures-board), which is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0)**.
-* **CYD Hardware Configuration:** Display initialization, pin mappings, and community examples adapted from [witnessmenow/ESP32-Cheap-Yellow-Display](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), which is licensed under the **MIT License**.
+* **CYD Hardware Configuration:** Display initialization, pin mappings, and community examples adapted from [witnessmenow/ESP32-Cheap-Yellow-Display](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), which is licensed under the **MIT License**. These adapted portions are primarily in `include/cydDisplay.h` and `src/cydDisplay.cpp`.
 
 ### License Summary
 
-In accordance with the **ShareAlike** requirements of the base project, this entire repository remains licensed under **CC BY-NC-SA 4.0**. 
+In accordance with the **ShareAlike** requirements of the base project, inherited departures-board sources in this repository remain under **CC BY-NC-SA 4.0**, while the adapted CYD portions above retain their original MIT notice below. 
 
 * **Attribution:** Credit belongs to the original creators of both repositories. 
 * **Non-Commercial:** This project is strictly for personal, non-commercial use. Reselling this software, or selling pre-assembled CYD boards pre-loaded with this software for commercial gain, is strictly prohibited under the terms of this license.
 * **ShareAlike:** Any further forks or modifications of this code must also be distributed under the same CC BY-NC-SA 4.0 license.
 
 To view a copy of the full legal text for this license, visit [Creative Commons BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+MIT notice for CYD adaptations from `witnessmenow/ESP32-Cheap-Yellow-Display`:
+
+```text
+MIT License
+
+Copyright (c) 2023 Brian Lough
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
