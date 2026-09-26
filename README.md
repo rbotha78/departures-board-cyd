@@ -1,6 +1,6 @@
 # departures-board [![License Badge](https://img.shields.io/badge/BY--NC--SA%204.0%20License-grey?style=flat&logo=creativecommons&logoColor=white)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-This is an ESP32 based Departures Board replicating those at many UK railway stations (using data provided by National Rail's public API), London Underground Arrivals boards (using data provided by TfL) and UK wide bus stops (using data provided by bustimes.org). This implementation uses a 3.12" OLED display panel with SSD1322 display controller onboard, plus an optional TTP223 touch sensor. STL files are also provided for 3D printing the custom desktop case. Pre-assembled departure boards are also available exclusively from our [store](https://store.gadec.co.uk).
+This is an ESP32 based Departures Board replicating those at many UK railway stations (using data provided by National Rail's public API), London Underground Arrivals boards (using data provided by TfL) and UK wide bus stops (using data provided by bustimes.org). This implementation uses a 3.12" OLED display panel with SSD1322 display controller onboard, plus an optional TTP223 touch sensor. STL files are also provided for 3D printing the custom desktop case.
 
 The default `esp32dev` PlatformIO environment targets the original SSD1322 OLED board. To build for an ESP32-2432S028R Cheap Yellow Display (CYD), use the `cyd` environment; it enables the integrated ILI9341 TFT, BOOT button input, backlight control, and a native 320x240 display layout. CYD National Rail service and feed rows use the fixed-width `u8g2_font_7x14B_tf` font at 1x scale.
 <img src="https://github.com/user-attachments/assets/81d6750f-3e02-48c8-a199-595bb0697681" style="display:block; margin:0 auto;"/>
@@ -190,10 +190,46 @@ Every UK bus stop has a unique ATCO code number. To find the ATCO code of the st
 ### Custom Time Zones
 To set a custom time zone for the departure board clock, you will need to enter the POSIX time zone string for your location. Some examples are `CST6CDT,M3.2.0/2,M11.1.0/2` for Canada (Central Time) and `AEST-10AEDT,M10.1.0,M4.1.0/3` for Australia (Eastern Time). The easiest way to find the correct syntax is to ask your favourite AI chat engine *"What is the POSIX time zone string for ..."*. Note that changing the time zone only affects the clock (and date) display. Service times are *always* shown in UK time.
 
-### Donating
+## Credits & Licensing
 
-<a href="https://buymeacoffee.com/gadec.uk"><img src="https://github.com/user-attachments/assets/e5960046-051a-45af-8730-e23d4725ab53" align="left" width="160" style="margin-right: 15px;" /></a>
-This software is completely free for non-commercial use without obligation. If you would like to support me and encourage ongoing updates, you can [buy me a coffee!](https://buymeacoffee.com/gadec.uk)
+This is a personal hobby fork that modifies the original departures board firmware to support the ESP32-2432S028R Cheap Yellow Display (CYD). 
 
-### Licence
-This work is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0**. To view a copy of this licence, visit [https://creativecommons.org/licenses/by-nc-sa/4.0/](https://creativecommons.org/licenses/by-nc-sa/4.0/). Note: the terms of the licence prohibit commercial use of this work, this includes *any* reselling of the work in kit or assembled form for commercial gain.
+This project combines work from two sources:
+* **Base Firmware:** Inherited from [gadec-uk/departures-board](https://github.com/gadec-uk/departures-board), which is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (CC BY-NC-SA 4.0)**.
+* **CYD Hardware Configuration:** Display initialization, pin mappings, and community examples adapted from [witnessmenow/ESP32-Cheap-Yellow-Display](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), which is licensed under the **MIT License**. These adapted portions are primarily in `include/cydDisplay.h` and `src/cydDisplay.cpp`.
+
+### License Summary
+
+In accordance with the **ShareAlike** requirements of the base project, inherited departures-board sources in this repository remain under **CC BY-NC-SA 4.0**, while the adapted CYD portions above retain their original MIT notice below. 
+
+* **Attribution:** Credit belongs to the original creators of both repositories. 
+* **Non-Commercial:** This project is strictly for personal, non-commercial use. Reselling this software, or selling pre-assembled CYD boards pre-loaded with this software for commercial gain, is strictly prohibited under the terms of this license.
+* **ShareAlike:** Further forks or modifications of the CC BY-NC-SA-covered portions must also be distributed under the same CC BY-NC-SA 4.0 license; separately licensed third-party portions retain their applicable license terms.
+
+To view a copy of the full legal text for this license, visit [Creative Commons BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+MIT notice for CYD adaptations from `witnessmenow/ESP32-Cheap-Yellow-Display`:
+
+```text
+MIT License
+
+Copyright (c) 2023 Brian Lough
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
