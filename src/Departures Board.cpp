@@ -763,11 +763,7 @@ void drawStationHeader(const char *stopName, const char *callingStopName, const 
 
   // Clear the top line
 #if defined(DISPLAY_CYD)
-  if (boardMode == MODE_TUBE) {
-    blankArea(0,ULINE0,SCREEN_WIDTH,ULINE1-1);
-  } else {
-    blankArea(0,LINE0,SCREEN_WIDTH,LINE1-1);
-  }
+  blankArea(0,LINE0,SCREEN_WIDTH,LINE1-1);
 #else
   if (boardMode == MODE_TUBE || boardMode == MODE_BUS) {
     blankArea(0,ULINE0,256,ULINE1-1);
@@ -992,6 +988,7 @@ void drawCurrentTime() {
       if (dateEnabled && timeinfo.tm_mday!=dateDay) {
         // Need to update the date on screen
         if (boardMode == MODE_BUS) drawStationHeader(locationName,"",locationFilter,0);
+        else if (boardMode == MODE_TUBE) drawStationHeader(locationName,"","",0);
         else drawStationHeader(station.location,callingStation,locationFilter,nrTimeOffset);
         u8g2.sendBuffer();  // Just refresh on new date
       }
@@ -1031,8 +1028,7 @@ void showUpdateIcon(bool show) {
 #if defined(DISPLAY_CYD)
       u8g2.setFont(NatRailTall12);
       u8g2.drawStr(10,224,"}");
-      if (boardMode == MODE_TUBE) u8g2.setFont(Underground10);
-      else setRailDetailFont();
+      setRailDetailFont();
 #else
       u8g2.setFont(NatRailTall12);
       u8g2.drawStr(0,50,"}");
@@ -2480,6 +2476,7 @@ void waitForFirstLoad() {
  *
  */
 
+#if !defined(DISPLAY_CYD)
 // Draw the TfL clock (if the time has changed)
 bool drawCurrentTimeUG() {
   if (strcmp(displayedTime,currentTime)) {
@@ -2501,14 +2498,149 @@ bool drawCurrentTimeUG() {
     return false;
   }
 }
+#endif
 
 void updateArrivals() {
   tfldata.loadArrivals(&station,&messages);
   lastDataLoadTime = millis();
   noDataLoaded = false;
   dataLoadSuccess++;
+#if defined(DISPLAY_CYD)
+  numMessages = 0;
+  if (weatherEnabled && weatherMsg[0]) {
+    strcpy(line2[numMessages++],weatherMsg);
+  }
+  if (rssEnabled && rssPriority && rssMessage[0] && !noScrolling) {
+    strcpy(line2[numMessages++],rssMessage);
+  }
+  for (int i=0;i<messages.numMessages;i++) {
+    strcpy(line2[numMessages++],messages.messages[i]);
+  }
+  if (rssEnabled && !rssPriority && rssMessage[0] && !noScrolling) {
+    strcpy(line2[numMessages++],rssMessage);
+  }
+#endif
 }
 
+#if defined(DISPLAY_CYD)
+void drawUndergroundService(int serviceId, int y, bool isShowingCurrentLocation = false) {
+  char clipDestination[MAXLOCATIONSIZE];
+  char etd[16] = "";
+
+  if (serviceId < station.numServices) {
+    u8g2.setTextScale(1);
+    setRailDetailFont();
+    blankArea(0,y,SCREEN_WIDTH,22);
+    const int baseline = railDetailBaseline(y);
+
+    char prefix[8];
+    sprintf(prefix,"%d ",serviceId+1);
+    int destPos = u8g2.drawStr(0,baseline,prefix);
+
+    if (serviceId || (strcmp(station.origin,"At Platform") && station.service[0].timeToStation>10)) {
+      if (station.service[serviceId].timeToStation <= 40) {
+        strcpy(etd,"Due");
+      } else {
+        int mins = (station.service[serviceId].timeToStation + 30) / 60;
+        sprintf(etd,"%d %s",mins,(mins==1)?"min":"mins");
+      }
+    }
+    int etdWidth = etd[0] ? getStringWidth(etd) + (etd[strlen(etd)-1]=='1'?1:0) : 0;
+    if (etd[0]) {
+      u8g2.drawStr(CYD_DETAIL_STATUS_RIGHT - etdWidth,baseline,etd);
+    }
+
+    const char *text = (isShowingCurrentLocation && station.origin[0]) ? station.origin : station.service[serviceId].destination;
+    strlcpy(clipDestination,text,sizeof(clipDestination));
+
+    int spaceAvailable = CYD_DETAIL_STATUS_RIGHT - destPos - etdWidth - 8;
+    if (spaceAvailable > 0 && getStringWidth(clipDestination) > spaceAvailable) {
+      while (getStringWidth(clipDestination) > spaceAvailable - 8 && strlen(clipDestination) > 0) {
+        clipDestination[strlen(clipDestination)-1] = '\0';
+      }
+      if (clipDestination[strlen(clipDestination)-1] == ' ') clipDestination[strlen(clipDestination)-1] = '\0';
+      strcat(clipDestination,"...");
+    }
+    if (spaceAvailable > 0) {
+      u8g2.drawStr(destPos,baseline,clipDestination);
+    }
+  }
+}
+
+// Draw/update the Underground Arrivals Board
+void drawUndergroundBoard() {
+  u8g2.setFontPosBaseline();
+  if (firstLoad) {
+    u8g2.clearBuffer();
+    u8g2.setContrast(brightness);
+    firstLoad = false;
+    cydSecondaryServiceIndex = 2;
+    serviceTimer = millis() + 10000;
+  } else {
+    blankArea(0,0,SCREEN_WIDTH,LINE4);
+  }
+  drawStationHeader(locationName,"","",0);
+
+  isShowingVia = false;
+  if (station.origin[0]) viaTimer = millis() + 6000; else viaTimer = millis() + 300000;
+
+  u8g2.setTextScale(1);
+  setRailDetailFont();
+
+  if (station.numServices == 0) {
+    centreText("There are no scheduled arrivals at this station.",railDetailBaseline(90));
+  } else {
+    drawUndergroundService(0,68,false);
+    if (station.numServices > 1) drawUndergroundService(1,102,false);
+    if (station.numServices > 2) {
+      if (cydSecondaryServiceIndex < 2 || cydSecondaryServiceIndex >= station.numServices) {
+        cydSecondaryServiceIndex = 2;
+      }
+      drawUndergroundService(cydSecondaryServiceIndex,136,false);
+    }
+  }
+
+  // Populate line2 messages for bottom ticker
+  numMessages = 0;
+  if (weatherEnabled && weatherMsg[0]) {
+    strcpy(line2[numMessages++],weatherMsg);
+  }
+  if (rssEnabled && rssPriority && rssMessage[0] && !noScrolling) {
+    strcpy(line2[numMessages++],rssMessage);
+  }
+  for (int i=0; i<messages.numMessages; i++) {
+    strcpy(line2[numMessages++],messages.messages[i]);
+  }
+  if (rssEnabled && !rssPriority && rssMessage[0] && !noScrolling) {
+    strcpy(line2[numMessages++],rssMessage);
+  }
+
+  // Draw bottom ticker
+  if (numMessages > 0) {
+    currentMessage = 0;
+    scrollStopsXpos = 0;
+    scrollStopsLength = getStringWidth(line2[currentMessage]);
+    blankArea(0,LINE3,SCREEN_WIDTH,20);
+    u8g2.setClipWindow(0,LINE3,SCREEN_WIDTH,LINE3+20);
+    if (scrollStopsLength <= SCREEN_WIDTH) {
+      centreText(line2[currentMessage],railDetailBaseline(LINE3));
+    } else {
+      u8g2.drawStr(scrollStopsXpos,railDetailBaseline(LINE3),line2[currentMessage]);
+    }
+    u8g2.setMaxClipWindow();
+    timer = millis() + 6000;
+  } else {
+    blankArea(0,LINE3,SCREEN_WIDTH,20);
+  }
+
+  displayedTime[0] = '\0';
+  drawCurrentTime();
+  setRailDetailFont();
+  u8g2.setFontPosBaseline();
+
+  u8g2.sendBuffer();
+}
+#else
 void drawUndergroundService(int serviceId, int y, bool isShowingCurrentLocation = false) {
   char serviceData[4+MAXLOCATIONSIZE];
   int usedSpace = 4;
@@ -2607,6 +2739,7 @@ void drawUndergroundBoard() {
 
   u8g2.sendBuffer();
 }
+#endif
 
 /*
  *
@@ -3663,6 +3796,118 @@ void departureBoardLoop() {
 // Processing loop for London Underground Arrivals board
 //
 void undergroundArrivalsLoop() {
+#if defined(DISPLAY_CYD)
+  if (millis()>nextDataUpdate && !fetchInProgress && !isSleeping && wifiConnected) {
+    if (!firstLoad) showUpdateIcon(true);
+    // Initiate a background update on Core 0
+    fetchMode = FETCH_BOARD;
+    fetchInProgress = true;
+    xTaskNotifyGive(fetchTaskHandle);
+    if (firstLoad) waitForFirstLoad();
+    if (lastUpdateResult == UPD_NO_CHANGE) lastUpdateResult = UPD_SUCCESS;
+  }
+
+  if (fetchComplete && updateIconVisible) showUpdateIcon(false);
+
+  if (fetchComplete && lastUpdateResult == UPD_NO_CHANGE) {
+    fetchComplete = false;
+    updateArrivals();
+    blankArea(0,64,SCREEN_WIDTH,LINE3-64);
+    if (station.numServices) {
+      drawUndergroundService(0,68,(showTubeCurrentLocation && isShowingVia && station.origin[0]));
+      if (station.numServices>1) drawUndergroundService(1,102,false);
+      if (station.numServices>2) {
+        if (cydSecondaryServiceIndex < 2 || cydSecondaryServiceIndex >= station.numServices) {
+          cydSecondaryServiceIndex = 2;
+        }
+        drawUndergroundService(cydSecondaryServiceIndex,136,false);
+      }
+    } else {
+      centreText("There are no scheduled arrivals at this station.",railDetailBaseline(90));
+    }
+    u8g2.updateDisplayArea(0, CYD_TILE_SERVICE_PANEL_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SERVICE_PANEL_H);
+  }
+
+  if (fetchComplete && lastUpdateResult != UPD_NO_CHANGE && !isSleeping) {
+    fetchComplete = false;
+    if (lastUpdateResult == UPD_SUCCESS) {
+      updateArrivals();
+      drawUndergroundBoard();
+    } else if (lastUpdateResult == UPD_DATA_ERROR || lastUpdateResult == UPD_TIMEOUT || lastUpdateResult == UPD_HTTP_ERROR) {
+      lastLoadFailure = millis();
+      dataLoadFailure++;
+      if (noDataLoaded) showNoDataScreen(); else drawUndergroundBoard();
+    } else if (lastUpdateResult == UPD_UNAUTHORISED) {
+      showTokenErrorScreen();
+      while (true) delay(10);
+    } else {
+      dataLoadFailure++;
+    }
+  }
+
+  // Check if we're alternating current location for primary service
+  if (showTubeCurrentLocation && millis()>viaTimer && !isSleeping && !noDataLoaded) {
+    if (station.numServices && station.origin[0] && lastUpdateResult!=UPD_UNAUTHORISED && lastUpdateResult!=UPD_DATA_ERROR) {
+      isShowingVia = !isShowingVia;
+      drawUndergroundService(0,68,isShowingVia);
+      u8g2.updateDisplayArea(0, 8, CYD_NATIVE_TILE_WIDTH, 5);
+      if (isShowingVia) viaTimer = millis()+3000; else viaTimer = millis()+8000;
+    }
+  }
+
+  // Rotate 3rd service line if there are more than 3 services
+  if (station.numServices > 3 && millis() > serviceTimer && !isSleeping && !noDataLoaded) {
+    cydSecondaryServiceIndex++;
+    if (cydSecondaryServiceIndex >= station.numServices) cydSecondaryServiceIndex = 2;
+    blankArea(0,136,SCREEN_WIDTH,LINE3-136);
+    drawUndergroundService(cydSecondaryServiceIndex,136,false);
+    u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
+    serviceTimer = millis() + 10000;
+  }
+
+  // Bottom ticker (disruption notices, weather, RSS, attribution)
+  if (numMessages > 0 && !isSleeping) {
+    if (scrollStopsLength <= SCREEN_WIDTH) {
+      if (millis() > timer) {
+        currentMessage = (currentMessage + 1) % numMessages;
+        scrollStopsLength = getStringWidth(line2[currentMessage]);
+        scrollStopsXpos = 0;
+        blankArea(0,LINE3,SCREEN_WIDTH,20);
+        u8g2.setClipWindow(0,LINE3,SCREEN_WIDTH,LINE3+20);
+        if (scrollStopsLength <= SCREEN_WIDTH) {
+          centreText(line2[currentMessage],railDetailBaseline(LINE3));
+          timer = millis() + 6000;
+        } else {
+          u8g2.drawStr(scrollStopsXpos,railDetailBaseline(LINE3),line2[currentMessage]);
+          timer = millis();
+        }
+        u8g2.setMaxClipWindow();
+        u8g2.updateDisplayArea(0, CYD_TILE_BOTTOM_TICKER_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_BOTTOM_TICKER_H);
+      }
+    } else {
+      blankArea(0,LINE3,SCREEN_WIDTH,20);
+      u8g2.setClipWindow(0,LINE3,SCREEN_WIDTH,LINE3+20);
+      u8g2.drawStr(scrollStopsXpos,railDetailBaseline(LINE3),line2[currentMessage]);
+      u8g2.setMaxClipWindow();
+      scrollStopsXpos--;
+      if (scrollStopsXpos < -scrollStopsLength) {
+        currentMessage = (currentMessage + 1) % numMessages;
+        scrollStopsLength = getStringWidth(line2[currentMessage]);
+        scrollStopsXpos = 0;
+        timer = millis() + (scrollStopsLength <= SCREEN_WIDTH ? 6000 : 0);
+      }
+      u8g2.updateDisplayArea(0, CYD_TILE_BOTTOM_TICKER_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_BOTTOM_TICKER_H);
+    }
+  }
+
+  if (!isSleeping) {
+    drawCurrentTime();
+
+    delayMs = frameTimeBus - (millis()-refreshTimer);
+    if (delayMs>0) delay(delayMs);
+    refreshTimer=millis();
+  }
+#else
   bool fullRefresh = false;
 
   if (millis()>nextDataUpdate && !fetchInProgress && !isSleeping && wifiConnected) {
@@ -3829,6 +4074,7 @@ void undergroundArrivalsLoop() {
     if (fullRefresh) u8g2.updateDisplayArea(0,1,32,6); else u8g2.updateDisplayArea(0,5,32,2);
     refreshTimer=millis();
   }
+#endif
 }
 
 //
