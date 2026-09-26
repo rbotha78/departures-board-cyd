@@ -3903,7 +3903,7 @@ void undergroundArrivalsLoop() {
   if (!isSleeping) {
     drawCurrentTime();
 
-    delayMs = frameTimeBus - (millis()-refreshTimer);
+    delayMs = frameTimeTube - (millis()-refreshTimer);
     if (delayMs>0) delay(delayMs);
     refreshTimer=millis();
   }
