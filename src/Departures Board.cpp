@@ -665,12 +665,19 @@ void drawStationTitle(const char *message, int x, int y) {
 #endif
 }
 
-void drawTruncatedStationTitle(const char *message, int line, int x) {
+void drawTruncatedStationTitle(const char *message, int line, int x, int maxWidth = -1) {
   char buff[strlen(message)+4];
-  int maxWidth = SCREEN_WIDTH - 6 - x;
+  if (maxWidth < 0) maxWidth = SCREEN_WIDTH - 6 - x;
   strcpy(buff,message);
   int i = strlen(buff);
+#if defined(DISPLAY_CYD)
+  int dotsWidth = u8g2.getStrWidth("...");
+  int targetWidth = (maxWidth > dotsWidth) ? (maxWidth - dotsWidth) : 0;
+  while (u8g2.getStrWidth(buff)>targetWidth && i) buff[i--] = '\0';
+  if (strlen(buff) > 0 && buff[strlen(buff)-1] == ' ') buff[strlen(buff)-1] = '\0';
+#else
   while (u8g2.getStrWidth(buff)>maxWidth && i) buff[i--] = '\0';
+#endif
   strcat(buff,"...");
   drawStationTitle(buff,x,line);
 }
@@ -678,7 +685,7 @@ void drawTruncatedStationTitle(const char *message, int line, int x) {
 void centreStationTitle(const char *message, int line, int margin=0, int maxWidth = SCREEN_WIDTH) {
   int width = u8g2.getStrWidth(message);
   if (width<=maxWidth) drawStationTitle(message,((maxWidth-width)/2)+margin,line);
-  else drawTruncatedStationTitle(message,line,0);
+  else drawTruncatedStationTitle(message,line,margin,maxWidth);
 }
 
 void drawProgressBar(int percent) {
@@ -804,12 +811,29 @@ void drawStationHeader(const char *stopName, const char *callingStopName, const 
   int boardTitleWidth = getStringWidth(boardTitle);
 
   if (dateEnabled) {
-    int const dateY=55;
     // Get the date
     char sysTime[29];
     strftime(sysTime,29,"%a %d %b",&timeinfo);
     dateWidth = getStringWidth(sysTime);
     dateDay = timeinfo.tm_mday;
+#if defined(DISPLAY_CYD)
+    int const effDateWidth = dateWidth + 1; // Account for x+1 double-strike bolding in drawStationTitle
+    int const dateX = SCREEN_WIDTH - effDateWidth;
+    drawStationTitle(sysTime,dateX,titleBaseline); // Right-aligned date top in title font
+
+    int const availableTitleWidth = dateX - 10 - titleOffset;
+    if (boardTitleWidth <= availableTitleWidth) {
+      if ((SCREEN_WIDTH - boardTitleWidth) / 2 < effDateWidth + 8) {
+        // Station name left aligned
+        drawStationTitle(boardTitle,titleOffset,titleBaseline);
+      } else {
+        centreStationTitle(boardTitle,titleBaseline);
+      }
+    } else {
+      drawTruncatedStationTitle(boardTitle,titleBaseline,titleOffset,availableTitleWidth);
+    }
+#else
+    int const dateY=55;
     if (callingStopName[0] || boardTitleWidth+dateWidth+10+titleOffset>=SCREEN_WIDTH) {
       blankArea(SCREEN_WIDTH-70,dateY,70,SCREEN_HEIGHT-dateY);
       u8g2.drawStr(SCREEN_WIDTH-dateWidth,dateY-1,sysTime); // Date bottom right
@@ -824,6 +848,7 @@ void drawStationHeader(const char *stopName, const char *callingStopName, const 
         centreStationTitle(boardTitle,titleBaseline);
       }
     }
+#endif
   } else {
     if (boardTitleWidth+titleOffset < SCREEN_WIDTH) centreStationTitle(boardTitle,titleBaseline);
     else drawTruncatedStationTitle(boardTitle,titleBaseline,titleOffset);
