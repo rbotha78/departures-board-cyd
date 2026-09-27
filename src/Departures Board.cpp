@@ -4568,7 +4568,10 @@ void setup(void) {
     if (webPassword[0] != '\0') {
       const String &url = request->url();
       bool isPublic = (url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
-                       url.endsWith(".webp") || url.endsWith(".png") || url.endsWith(".ico"));
+                       url == "/favicon.png" || url == "/irail.webp" || url == "/itube.webp" ||
+                       url == "/ibus.webp" || url == "/nrelogo.webp" || url == "/rdglogo.webp" ||
+                       url == "/tfllogo.webp" || url == "/btlogo.webp" || url == "/tube.webp" ||
+                       url == "/nr.webp");
       if (!isPublic) {
         if (!request->authenticate(webUsername, webPassword)) {
           return request->requestAuthentication(AsyncAuthType::AUTH_BASIC, "DeparturesBoard", "Authentication required");
