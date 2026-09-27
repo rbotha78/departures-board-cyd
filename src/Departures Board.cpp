@@ -452,6 +452,8 @@ static int currentScheduleSlot = 0;
 static unsigned long nextSchedulerCheck = 0;
 static char hostname[33];                  // Network hostname (mDNS)
 static char myUrl[24];                     // Stores the board's own url
+static char webPassword[33] = "";          // Web interface authentication password (empty = disabled)
+static char webUsername[33] = "admin";     // Web interface authentication username
 
 // WiFi Manager status
 static bool wifiConfigured = false;        // Has WiFi Manager used the captive portal
@@ -1474,6 +1476,8 @@ void writeDefaultConfig() {
 
   String defaultConfig = "{\"crs\":\"\",\"station\":\"\",\"lat\":0,\"lon\":0,\"weather\":true,\"sleep\":false,\"showDate\":false,\"showBus\":false,\"update\":true,\"sleepStarts\":23,\"sleepEnds\":8,\"brightness\":" + String(defaultBrightness) + ",\"touch\":" + String(defaultTouch ? "true" : "false") + ",\"displayColor\":0,\"displayScale\":0,\"tubeId\":\"\",\"tubeName\":\"\",\"mode\":" + String((!nrToken[0] && rdmDeparturesApiKey=="")?"1":"0") + "}";
   saveFile("/config.json",defaultConfig);
+  strcpy(webPassword, "");
+  strcpy(webUsername, "admin");
   resetLocationIds();
   saveFirmwareInfo();
 }
@@ -1630,6 +1634,11 @@ void loadConfig(bool coldBoot = false, boardModes requestedMode = MODE_LOADCONFI
         if (settings["rssName"].is<const char*>())    rssName = settings["rssName"].as<String>();
         if (rssURL != "") rssEnabled = true; else rssEnabled = false;
         if (settings["rssPriority"].is<bool>())       rssPriority = settings["rssPriority"];
+
+        if (settings["webPassword"].is<const char*>()) strlcpy(webPassword, settings["webPassword"], sizeof(webPassword));
+        else strcpy(webPassword, "");
+        if (settings["webUsername"].is<const char*>() && strlen(settings["webUsername"]) > 0) strlcpy(webUsername, settings["webUsername"], sizeof(webUsername));
+        else strcpy(webUsername, "admin");
 
         if (requestedMode != MODE_NEXTMODE) {
           if (settings["mode"].is<int>())             boardMode = settings["mode"];
@@ -4554,6 +4563,24 @@ void setup(void) {
 #endif
   u8g2.sendBuffer();                                              // Send to CYD panel
 
+  // Configure authentication middleware
+  server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
+    if (webPassword[0] != '\0') {
+      const String &url = request->url();
+      bool isPublic = (url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
+                       url == "/favicon.png" || url == "/irail.webp" || url == "/itube.webp" ||
+                       url == "/ibus.webp" || url == "/nrelogo.webp" || url == "/rdglogo.webp" ||
+                       url == "/tfllogo.webp" || url == "/btlogo.webp" || url == "/tube.webp" ||
+                       url == "/nr.webp");
+      if (!isPublic) {
+        if (!request->authenticate(webUsername, webPassword)) {
+          return request->requestAuthentication(AsyncAuthType::AUTH_BASIC, "DeparturesBoard", "Authentication required");
+        }
+      }
+    }
+    next();
+  });
+
   // Configure the local webserver paths
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){handleRoot(request);});
   server.on("/erasewifi", HTTP_GET, [](AsyncWebServerRequest *request){handleEraseWiFi(request);});
@@ -4587,6 +4614,18 @@ void setup(void) {
     if (request->_tempObject) {
       String* body = (String*)(request->_tempObject);
       saveFile("/config.json", body->c_str());
+
+      JsonDocument doc;
+      if (!deserializeJson(doc, body->c_str())) {
+        if (doc["webPassword"].is<const char*>()) {
+          strlcpy(webPassword, doc["webPassword"], sizeof(webPassword));
+        } else {
+          strcpy(webPassword, "");
+        }
+        if (doc["webUsername"].is<const char*>() && strlen(doc["webUsername"]) > 0) {
+          strlcpy(webUsername, doc["webUsername"], sizeof(webUsername));
+        }
+      }
 
       delete body; // Clean up memory
       request->_tempObject = nullptr;
@@ -5011,6 +5050,23 @@ void loop(void) {
     cmd.trim();
     if (cmd.equalsIgnoreCase("snap") || cmd.equalsIgnoreCase("screenshot")) {
       dumpSerialScreenshot();
+    } else if (cmd.equalsIgnoreCase("clearpassword") || cmd.equalsIgnoreCase("resetpassword")) {
+      strcpy(webPassword, "");
+      if (LittleFS.exists("/config.json")) {
+        File file = LittleFS.open("/config.json", "r");
+        if (file) {
+          JsonDocument doc;
+          DeserializationError error = deserializeJson(doc, file);
+          file.close();
+          if (!error) {
+            doc["webPassword"] = "";
+            String updated;
+            serializeJson(doc, updated);
+            saveFile("/config.json", updated.c_str());
+          }
+        }
+      }
+      Serial.println("Web interface password cleared.");
     }
   }
 
