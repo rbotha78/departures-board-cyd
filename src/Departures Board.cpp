@@ -2082,9 +2082,9 @@ void drawPrimaryServiceMessage() {
   u8g2.setMaxClipWindow();
 }
 
-void drawSecondaryServiceLine(int serviceIndex) {
-  const int serviceBaseline = railDetailBaseline(LINE2);
-  const int infoBaseline = railDetailBaseline(LINE2 + CYD_SECOND_SERVICE_INFO_OFFSET);
+void drawSecondaryServiceLine(int serviceIndex, int y = LINE2, bool blank = true) {
+  const int serviceBaseline = railDetailBaseline(y);
+  const int infoBaseline = railDetailBaseline(y + CYD_SECOND_SERVICE_INFO_OFFSET);
   char clipDestination[MAXLOCATIONSIZE+5];
   char etd[16];
   char ordinal[8];
@@ -2092,7 +2092,7 @@ void drawSecondaryServiceLine(int serviceIndex) {
 
   u8g2.setTextScale(1);
   setRailDetailFont();
-  blankArea(0,LINE2,SCREEN_WIDTH,LINE3-LINE2);
+  if (blank) blankArea(0,y,SCREEN_WIDTH,LINE3-LINE2);
 
   if (station.numServices <= 1 || serviceIndex <= 0 || serviceIndex >= station.numServices) return;
 
@@ -2523,14 +2523,14 @@ void updateArrivals() {
 }
 
 #if defined(DISPLAY_CYD)
-void drawUndergroundService(int serviceId, int y, bool isShowingCurrentLocation = false) {
+void drawUndergroundService(int serviceId, int y, bool isShowingCurrentLocation = false, bool blank = true) {
   char clipDestination[MAXLOCATIONSIZE];
   char etd[16] = "";
 
   if (serviceId < station.numServices) {
     u8g2.setTextScale(1);
     setRailDetailFont();
-    blankArea(0,y,SCREEN_WIDTH,22);
+    if (blank) blankArea(0,y,SCREEN_WIDTH,22);
     const int baseline = railDetailBaseline(y);
 
     char prefix[8];
@@ -2747,14 +2747,14 @@ void drawUndergroundBoard() {
  *
  */
 #if defined(DISPLAY_CYD)
-void drawBusService(int serviceId, int y, int destPos) {
+void drawBusService(int serviceId, int y, int destPos, bool blank = true) {
   char clipDestination[MAXLOCATIONSIZE];
   char etd[16];
 
   if (serviceId < station.numServices) {
     u8g2.setTextScale(1);
     setRailDetailFont();
-    blankArea(0,y,SCREEN_WIDTH,22);
+    if (blank) blankArea(0,y,SCREEN_WIDTH,22);
     const int baseline = railDetailBaseline(y);
 
     u8g2.drawStr(0,baseline,station.service[serviceId].via);
@@ -3658,13 +3658,13 @@ void departureBoardLoop() {
   if (millis()>serviceTimer && !isScrollingService && !isSleeping && !noServiceClockIsActive && !noDataLoaded && lastUpdateResult!=UPD_UNAUTHORISED && lastUpdateResult!=UPD_DATA_ERROR) {
 #if defined(DISPLAY_CYD)
     if (station.numServices > 2) {
+      prevService = cydSecondaryServiceIndex;
       cydSecondaryServiceIndex++;
       if (cydSecondaryServiceIndex >= station.numServices) {
         cydSecondaryServiceIndex = 1;
       }
-      drawSecondaryServiceLine(cydSecondaryServiceIndex);
-      u8g2.updateDisplayArea(0, CYD_TILE_SECONDARY_SERVICE_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SECONDARY_SERVICE_H);
-      serviceTimer = millis() + 15000;
+      scrollServiceYpos = 44;
+      isScrollingService = true;
     } else {
       if (cydSecondaryServiceIndex != 1 && station.numServices == 2) {
         cydSecondaryServiceIndex = 1;
@@ -3745,21 +3745,44 @@ void departureBoardLoop() {
 #endif
   }
 
-  if (isScrollingService && millis()>serviceTimer && !isSleeping && !noServiceClockIsActive) {
-    blankArea(0,LINE3,256,9);
+  if (isScrollingService && !isSleeping && !noServiceClockIsActive) {
+#if defined(DISPLAY_CYD)
+    blankArea(0,LINE2,SCREEN_WIDTH,LINE3-LINE2);
     if (scrollServiceYpos) {
-      // we're scrolling the service into view
-      setDisplayClipWindow(0,LINE3,256,LINE3+9);
-      // if the prev service is showing, we need to scroll it up off
-      if (prevService>0) drawServiceLine(prevService,scrollServiceYpos+LINE3-12);
-      drawServiceLine(line3Service,scrollServiceYpos+LINE3-1);
+      u8g2.setClipWindow(0,LINE2,SCREEN_WIDTH,LINE3);
+      if (prevService > 0) {
+        drawSecondaryServiceLine(prevService, LINE2 - (44 - scrollServiceYpos), false);
+      }
+      drawSecondaryServiceLine(cydSecondaryServiceIndex, LINE2 + scrollServiceYpos, false);
       u8g2.setMaxClipWindow();
-      scrollServiceYpos--;
-      if (scrollServiceYpos==0) {
-        serviceTimer=millis()+5000;
-        isScrollingService=false;
+      u8g2.updateDisplayArea(0, CYD_TILE_SECONDARY_SERVICE_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SECONDARY_SERVICE_H);
+      scrollServiceYpos -= 4;
+      if (scrollServiceYpos <= 0) {
+        scrollServiceYpos = 0;
+        isScrollingService = false;
+        serviceTimer = millis() + 15000;
+        drawSecondaryServiceLine(cydSecondaryServiceIndex);
+        u8g2.updateDisplayArea(0, CYD_TILE_SECONDARY_SERVICE_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SECONDARY_SERVICE_H);
       }
     }
+#else
+    if (millis()>serviceTimer) {
+      blankArea(0,LINE3,256,9);
+      if (scrollServiceYpos) {
+        // we're scrolling the service into view
+        setDisplayClipWindow(0,LINE3,256,LINE3+9);
+        // if the prev service is showing, we need to scroll it up off
+        if (prevService>0) drawServiceLine(prevService,scrollServiceYpos+LINE3-12);
+        drawServiceLine(line3Service,scrollServiceYpos+LINE3-1);
+        u8g2.setMaxClipWindow();
+        scrollServiceYpos--;
+        if (scrollServiceYpos==0) {
+          serviceTimer=millis()+5000;
+          isScrollingService=false;
+        }
+      }
+    }
+#endif
   }
 
   if (!isSleeping) {
@@ -3828,7 +3851,7 @@ void undergroundArrivalsLoop() {
     u8g2.updateDisplayArea(0, CYD_TILE_SERVICE_PANEL_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SERVICE_PANEL_H);
   }
 
-  if (fetchComplete && lastUpdateResult != UPD_NO_CHANGE && !isSleeping) {
+  if (fetchComplete && lastUpdateResult != UPD_NO_CHANGE && !isScrollingService && !isSleeping) {
     fetchComplete = false;
     if (lastUpdateResult == UPD_SUCCESS) {
       updateArrivals();
@@ -3856,13 +3879,31 @@ void undergroundArrivalsLoop() {
   }
 
   // Rotate 3rd service line if there are more than 3 services
-  if (station.numServices > 3 && millis() > serviceTimer && !isSleeping && !noDataLoaded) {
+  if (station.numServices > 3 && millis() > serviceTimer && !isScrollingService && !isSleeping && !noDataLoaded) {
+    prevService = cydSecondaryServiceIndex;
     cydSecondaryServiceIndex++;
     if (cydSecondaryServiceIndex >= station.numServices) cydSecondaryServiceIndex = 2;
+    scrollServiceYpos = 22;
+    isScrollingService = true;
+  }
+
+  if (isScrollingService && !isSleeping) {
     blankArea(0,136,SCREEN_WIDTH,LINE3-136);
-    drawUndergroundService(cydSecondaryServiceIndex,136,false);
-    u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
-    serviceTimer = millis() + 10000;
+    if (scrollServiceYpos) {
+      u8g2.setClipWindow(0,136,SCREEN_WIDTH,158);
+      drawUndergroundService(prevService, 136 - (22 - scrollServiceYpos), false, false);
+      drawUndergroundService(cydSecondaryServiceIndex, 136 + scrollServiceYpos, false, false);
+      u8g2.setMaxClipWindow();
+      u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
+      scrollServiceYpos -= 2;
+      if (scrollServiceYpos <= 0) {
+        scrollServiceYpos = 0;
+        isScrollingService = false;
+        serviceTimer = millis() + 10000;
+        drawUndergroundService(cydSecondaryServiceIndex, 136, false);
+        u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
+      }
+    }
   }
 
   // Bottom ticker (disruption notices, weather, RSS, attribution)
@@ -4113,7 +4154,7 @@ void busDeparturesLoop() {
     u8g2.updateDisplayArea(0, CYD_TILE_SERVICE_PANEL_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SERVICE_PANEL_H);
   }
 
-  if (fetchComplete && lastUpdateResult != UPD_NO_CHANGE && !isSleeping) {
+  if (fetchComplete && lastUpdateResult != UPD_NO_CHANGE && !isScrollingService && !isSleeping) {
     fetchComplete = false;
     if (lastUpdateResult == UPD_SUCCESS) {
       updateBusDepartures();
@@ -4131,13 +4172,31 @@ void busDeparturesLoop() {
   }
 
   // Rotate 3rd service line if there are more than 3 services
-  if (station.numServices > 3 && millis() > serviceTimer && !isSleeping && !noDataLoaded) {
+  if (station.numServices > 3 && millis() > serviceTimer && !isScrollingService && !isSleeping && !noDataLoaded) {
+    prevService = cydSecondaryServiceIndex;
     cydSecondaryServiceIndex++;
     if (cydSecondaryServiceIndex >= station.numServices) cydSecondaryServiceIndex = 2;
+    scrollServiceYpos = 22;
+    isScrollingService = true;
+  }
+
+  if (isScrollingService && !isSleeping) {
     blankArea(0,136,SCREEN_WIDTH,LINE3-136);
-    drawBusService(cydSecondaryServiceIndex,136,busDestX);
-    u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
-    serviceTimer = millis() + 10000;
+    if (scrollServiceYpos) {
+      u8g2.setClipWindow(0,136,SCREEN_WIDTH,158);
+      drawBusService(prevService, 136 - (22 - scrollServiceYpos), busDestX, false);
+      drawBusService(cydSecondaryServiceIndex, 136 + scrollServiceYpos, busDestX, false);
+      u8g2.setMaxClipWindow();
+      u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
+      scrollServiceYpos -= 2;
+      if (scrollServiceYpos <= 0) {
+        scrollServiceYpos = 0;
+        isScrollingService = false;
+        serviceTimer = millis() + 10000;
+        drawBusService(cydSecondaryServiceIndex, 136, busDestX);
+        u8g2.updateDisplayArea(0, 16, CYD_NATIVE_TILE_WIDTH, 6);
+      }
+    }
   }
 
   // Bottom ticker (attribution and weather)
