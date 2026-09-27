@@ -588,6 +588,30 @@
                 <div class="py-2">
                   <div class="d-flex justify-content-between align-items-center">
                     <div>
+                      <label class="form-check-label d-block" for="optAuth">Protect web interface with password</label>
+                      <div class="small text-body-secondary">Prompts for authentication (username: admin)</div>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                      <input class="form-check-input" type="checkbox" id="optAuth" role="switch">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mb-2" id="customAuthbox" style="display:none;">
+                  <div class="input-group">
+                    <input id="webPassword" type="password" maxlength="32"
+                      placeholder="Enter password" class="form-control">
+                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                      <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                    </button>
+                  </div>
+                  <div class="form-text">Set a password to protect all settings and management pages. Leave blank or toggle off to disable.</div>
+                </div>
+
+                <hr class="my-0 opacity-10">
+                <div class="py-2">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
                       <label class="form-check-label d-block" for="optTZ">Set custom (non-UK) time zone</label>
                       <div class="small text-body-secondary">Only changes the time zone of the clock display</div>
                     </div>
@@ -860,6 +884,9 @@
       customTZ: document.getElementById("customTZ"),
       optHost: document.getElementById("optHost"),
       customHost: document.getElementById("customHost"),
+      optAuth: document.getElementById("optAuth"),
+      webPassword: document.getElementById("webPassword"),
+      togglePassword: document.getElementById("togglePassword"),
       nrTimeOffset: document.getElementById("nrTimeOffset"),
       rssFeedList: document.getElementById("rssFeedList"),
       dataSource: document.getElementById("dataSource"),
@@ -1310,6 +1337,13 @@
     elements.customTZ.addEventListener("blur", validateTZ);
     elements.optHost.addEventListener("change", () => { show("customHostbox", isChecked("optHost")); if (!isChecked("optHost")) { elements.customHost.value = ""; appState.hostnameOK = true; } });
     elements.customHost.addEventListener("blur", validateHostname);
+    elements.optAuth.addEventListener("change", () => { show("customAuthbox", isChecked("optAuth")); if (!isChecked("optAuth")) elements.webPassword.value = ""; });
+    elements.togglePassword.addEventListener("click", () => {
+      const isPass = elements.webPassword.type === "password";
+      elements.webPassword.type = isPass ? "text" : "password";
+      const icon = document.getElementById("togglePasswordIcon");
+      if (icon) icon.className = isPass ? "bi bi-eye-slash" : "bi bi-eye";
+    });
     elements.dataSource.addEventListener("change", () => { if (elements.dataSource.value != "") {appState.dataSource = parseInt(elements.dataSource.value); applyBoardMode(); }});
     elements.enableScheduler.addEventListener('change', (e) => {
         if (e.target.checked) {
@@ -1832,6 +1866,10 @@
       setCheckbox("optHost", elements.customHost.value.length);
       show("customHostbox", elements.customHost.value.length);
 
+      elements.webPassword.value = s.webPassword || "";
+      setCheckbox("optAuth", elements.webPassword.value.length > 0);
+      show("customAuthbox", elements.webPassword.value.length > 0);
+
       setCheckbox("enableSleep", s.sleep);
       setCheckbox("darkSleep", s.darkSleep);
       setCheckbox("sleepUseBigClock", s.sleepUseBigClock);
@@ -2071,6 +2109,7 @@
       }
       if (isChecked("optTZ") && elements.customTZ.value.trim().length) s.TZ = elements.customTZ.value.trim(); else delete s.TZ;
       if (isChecked("optHost") && elements.customHost.value.trim().length) s.hostname = elements.customHost.value.trim(); else delete s.hostname;
+      if (isChecked("optAuth") && elements.webPassword.value.trim().length) s.webPassword = elements.webPassword.value.trim(); else s.webPassword = "";
       s.enableScheduler = document.getElementById('enableScheduler').checked;
       s.enableCarousel = document.getElementById('enableCarousel').checked;
       s.scheduler = appState.scheduler;
