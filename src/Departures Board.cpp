@@ -668,12 +668,16 @@ void drawStationTitle(const char *message, int x, int y) {
 void drawTruncatedStationTitle(const char *message, int line, int x, int maxWidth = -1) {
   char buff[strlen(message)+4];
   if (maxWidth < 0) maxWidth = SCREEN_WIDTH - 6 - x;
-  int dotsWidth = u8g2.getStrWidth("...");
-  int targetWidth = (maxWidth > dotsWidth) ? (maxWidth - dotsWidth) : 0;
   strcpy(buff,message);
   int i = strlen(buff);
+#if defined(DISPLAY_CYD)
+  int dotsWidth = u8g2.getStrWidth("...");
+  int targetWidth = (maxWidth > dotsWidth) ? (maxWidth - dotsWidth) : 0;
   while (u8g2.getStrWidth(buff)>targetWidth && i) buff[i--] = '\0';
   if (strlen(buff) > 0 && buff[strlen(buff)-1] == ' ') buff[strlen(buff)-1] = '\0';
+#else
+  while (u8g2.getStrWidth(buff)>maxWidth && i) buff[i--] = '\0';
+#endif
   strcat(buff,"...");
   drawStationTitle(buff,x,line);
 }
