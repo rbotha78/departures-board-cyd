@@ -144,7 +144,8 @@ $env:PLATFORMIO_CORE_DIR = 'C:\Users\rober\.copilot\session-state\<session-id>\f
 
 ### Building and Uploading
 
-When validating a CYD change, build **and upload** to the attached device:
+When validating a CYD change, first check whether the CYD is connected to a
+serial port. If it is, build **and upload** to the attached device:
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
@@ -153,6 +154,25 @@ chcp 65001
 $env:PLATFORMIO_CORE_DIR = 'C:\Users\rober\.copilot\session-state\<session-id>\files\platformio-core'
 python -m platformio run -e cyd -t upload
 ```
+
+If no CYD serial port is present, build without serial upload using
+`python -m platformio run -e cyd`, then upload `.pio/build/cyd/firmware.bin`
+via the board's HTTP `/update` endpoint. Discover reachable Departures Board devices using
+`/info`, and confirm each CYD candidate is 320x240 via its public
+`/screenshot.bmp` endpoint. If multiple eligible boards are found, show their
+IP addresses and identifying details and **ask the user to choose one before
+uploading**; never pick one automatically. If the target cannot be identified
+unambiguously, do not upload. The endpoint accepts a multipart `update` field:
+
+```powershell
+curl.exe --basic --user admin --fail-with-body --show-error --form "update=@.pio/build/cyd/firmware.bin;filename=firmware.bin" "http://<chosen-ip>/update"
+```
+
+Use the configured web username if it differs from `admin`. Enter the admin
+password only at the terminal's private prompt (or in the browser at `/update`),
+never in chat or on the command line. Use HTTP Basic only on a trusted local
+network. Verify the upload response, reboot and new firmware build timestamp
+via `/info`, then complete the post-upload screenshot verification below.
 
 Also build the OLED environment for changes that touch shared firmware paths:
 
