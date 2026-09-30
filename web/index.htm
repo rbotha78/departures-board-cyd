@@ -64,6 +64,11 @@
           </div>
         </legend>
 
+        <div class="mb-3" id="boardScreenshotPreview">
+          <img id="boardScreenshot" src="/screenshot.bmp" alt="Current board display"
+            style="display:block;max-width:100%;height:auto;margin:0 auto;">
+        </div>
+
         <div class="mb-3" id="modeSelector">
           <label class="form-label">Board Mode</label>
           <div class="btn-group w-100" role="group">
@@ -905,6 +910,9 @@
       .then(response => response.json())
       .then(info => { document.getElementById('cydDisplaySettings').style.display = info.cyd ? '' : 'none'; })
       .catch(() => { document.getElementById('cydDisplaySettings').style.display = 'none'; });
+
+    const boardScreenshot = document.getElementById('boardScreenshot');
+    setInterval(() => { boardScreenshot.src = `/screenshot.bmp?t=${Date.now()}`; }, 10000);
 
     const busFilterError="Please enter a valid list of bus services to filter on, or leave blank for all services.";
     const platformFilterError="Please enter a valid list of platforms to filter on, or leave blank for all services.";
