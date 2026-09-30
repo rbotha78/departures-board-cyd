@@ -533,6 +533,9 @@ static unsigned long serviceTimer=0;
 static unsigned long viaTimer=0;
 static bool showingMessage = false;
 #if defined(DISPLAY_CYD)
+static const int CYD_PRIMARY_SERVICE_SCROLL_DISTANCE = PRIMARY_MESSAGE_LINE - LINE1;
+static const uint8_t CYD_TILE_PRIMARY_SERVICE_Y = 8;
+static const uint8_t CYD_TILE_PRIMARY_SERVICE_H = 5;
 static const int CYD_SECOND_SERVICE_INFO_OFFSET = 22;
 static const int CYD_DETAIL_STATUS_RIGHT = SCREEN_WIDTH - 12;
 static const uint8_t CYD_TILE_SERVICE_PANEL_Y = 8;     // y = 64..175 (14 tile rows)
@@ -553,6 +556,12 @@ static int cydPrimaryMessageCount = 0;
 static int cydPrimaryMessageIndex = 0;
 static int cydSecondaryServiceIndex = 1;
 static unsigned long primaryServiceMessageTimer = 0;
+static rdService cydPreviousPrimaryService;
+static bool cydPreviousPrimaryPlatformAvailable = false;
+static bool cydPreviousPrimaryShowVia = false;
+static bool cydPrimaryServiceHasPrevious = false;
+static bool isScrollingCydPrimaryService = false;
+static int cydPrimaryServiceScrollY = 0;
 #endif
 
 // TfL/bus specific animation
@@ -1993,46 +2002,14 @@ bool checkForFirmwareUpdate() {
  */
 
 // Draw the primary service line
+#if defined(DISPLAY_CYD)
+void drawPrimaryServiceAt(const rdService &service, bool platformAvailable, bool showVia, int y);
+#endif
+
 void drawPrimaryService(bool showVia) {
 #if defined(DISPLAY_CYD)
-  uint8_t previousTextScale = u8g2.getTextScale();
-  u8g2.setTextScale(1);
-  setRailDetailFont();
-  const int primaryInfoTop = LINE1 + 22;
-  const int primaryBaseline = railDetailBaseline(LINE1);
-  const int primaryInfoBaseline = railDetailBaseline(primaryInfoTop);
-  int destPos;
-  char clipDestination[MAXLOCATIONSIZE+5];
-  char etd[16];
-  char plat[9];
-
   blankArea(0,LINE1,256,LINE2-LINE1);
-  destPos = u8g2.drawStr(0,primaryBaseline,station.service[0].sTime) + 6;
-  if (showVia) strcpy(clipDestination,station.service[0].via);
-  else {
-    strcpy(clipDestination,station.service[0].destination);
-    if (station.service[0].serviceType == BUS) strcat(clipDestination," ~");  // Add bus icon to destination
-  }
-  int spaceAvailable = SCREEN_WIDTH - destPos - 6;
-  if (getStringWidth(clipDestination) > spaceAvailable) {
-    while (getStringWidth(clipDestination) > (spaceAvailable - 8)) {
-      clipDestination[strlen(clipDestination)-1] = '\0';
-    }
-    if (clipDestination[strlen(clipDestination)-1] == ' ') clipDestination[strlen(clipDestination)-1] = '\0';
-    strcat(clipDestination,"...");
-  }
-  u8g2.drawStr(destPos,primaryBaseline,clipDestination);
-
-  if (isDigit(station.service[0].etd[0])) sprintf(etd,"Exp %s",station.service[0].etd);
-  else strcpy(etd,station.service[0].etd);
-  int etdWidth = getStringWidth(etd) + (etd[strlen(etd)-1]=='1'?1:0);
-  u8g2.drawStr(CYD_DETAIL_STATUS_RIGHT - etdWidth,primaryInfoBaseline,etd);
-
-  if (station.platformAvailable && station.service[0].platform[0] && station.service[0].serviceType == TRAIN && !hidePlatform) {
-    sprintf(plat,"Plat %.3s",station.service[0].platform);
-    u8g2.drawStr(0,primaryInfoBaseline,plat);
-  }
-  u8g2.setTextScale(previousTextScale);
+  drawPrimaryServiceAt(station.service[0],station.platformAvailable,showVia,LINE1);
   return;
 #else
   int destPos;
@@ -2076,6 +2053,77 @@ void drawPrimaryService(bool showVia) {
 }
 
 #if defined(DISPLAY_CYD)
+void drawPrimaryServiceAt(const rdService &service, bool platformAvailable, bool showVia, int y) {
+  uint8_t previousTextScale = u8g2.getTextScale();
+  u8g2.setTextScale(1);
+  setRailDetailFont();
+  const int primaryBaseline = railDetailBaseline(y);
+  const int primaryInfoBaseline = railDetailBaseline(y + CYD_SECOND_SERVICE_INFO_OFFSET);
+  char clipDestination[MAXLOCATIONSIZE+5];
+  char etd[16];
+  char plat[9];
+
+  int destPos = u8g2.drawStr(0,primaryBaseline,service.sTime) + 6;
+  if (showVia) strcpy(clipDestination,service.via);
+  else {
+    strcpy(clipDestination,service.destination);
+    if (service.serviceType == BUS) strcat(clipDestination," ~");
+  }
+  int spaceAvailable = SCREEN_WIDTH - destPos - 6;
+  if (getStringWidth(clipDestination) > spaceAvailable) {
+    while (getStringWidth(clipDestination) > (spaceAvailable - 8)) {
+      clipDestination[strlen(clipDestination)-1] = '\0';
+    }
+    if (clipDestination[strlen(clipDestination)-1] == ' ') clipDestination[strlen(clipDestination)-1] = '\0';
+    strcat(clipDestination,"...");
+  }
+  u8g2.drawStr(destPos,primaryBaseline,clipDestination);
+
+  if (isDigit(service.etd[0])) sprintf(etd,"Exp %s",service.etd);
+  else strcpy(etd,service.etd);
+  int etdWidth = getStringWidth(etd) + (etd[strlen(etd)-1]=='1'?1:0);
+  u8g2.drawStr(CYD_DETAIL_STATUS_RIGHT - etdWidth,primaryInfoBaseline,etd);
+
+  if (platformAvailable && service.platform[0] && service.serviceType == TRAIN && !hidePlatform) {
+    sprintf(plat,"Plat %.3s",service.platform);
+    u8g2.drawStr(0,primaryInfoBaseline,plat);
+  }
+  u8g2.setTextScale(previousTextScale);
+}
+
+void beginCydPrimaryServiceAnimation(const rdService *previousService, bool previousPlatformAvailable, bool previousShowVia) {
+  cydPrimaryServiceHasPrevious = previousService != nullptr;
+  if (previousService) {
+    cydPreviousPrimaryService = *previousService;
+    cydPreviousPrimaryPlatformAvailable = previousPlatformAvailable;
+    cydPreviousPrimaryShowVia = previousShowVia;
+  }
+  cydPrimaryServiceScrollY = CYD_PRIMARY_SERVICE_SCROLL_DISTANCE;
+  isScrollingCydPrimaryService = true;
+}
+
+bool cydPrimaryServiceChanged(const rdService &previousService, bool previousPlatformAvailable) {
+  const rdService &service = station.service[0];
+  return strcmp(previousService.sTime,service.sTime) != 0 ||
+         strcmp(previousService.destination,service.destination) != 0 ||
+         strcmp(previousService.via,service.via) != 0 ||
+         strcmp(previousService.etd,service.etd) != 0 ||
+         strcmp(previousService.platform,service.platform) != 0 ||
+         previousService.serviceType != service.serviceType ||
+         previousPlatformAvailable != station.platformAvailable;
+}
+
+void drawCydPrimaryServiceTransition(bool showVia) {
+  blankArea(0,LINE1,SCREEN_WIDTH,CYD_PRIMARY_SERVICE_SCROLL_DISTANCE);
+  u8g2.setClipWindow(0,LINE1,SCREEN_WIDTH,PRIMARY_MESSAGE_LINE);
+  if (cydPrimaryServiceHasPrevious) {
+    drawPrimaryServiceAt(cydPreviousPrimaryService,cydPreviousPrimaryPlatformAvailable,cydPreviousPrimaryShowVia,
+                         LINE1 - (CYD_PRIMARY_SERVICE_SCROLL_DISTANCE - cydPrimaryServiceScrollY));
+  }
+  drawPrimaryServiceAt(station.service[0],station.platformAvailable,showVia,LINE1 + cydPrimaryServiceScrollY);
+  u8g2.setMaxClipWindow();
+}
+
 void addCydPrimaryMessage(const char *message) {
   if (!message[0] || cydPrimaryMessageCount >= (int)(sizeof(cydPrimaryMessages) / sizeof(cydPrimaryMessages[0]))) return;
   strlcpy(cydPrimaryMessages[cydPrimaryMessageCount++],message,sizeof(cydPrimaryMessages[0]));
@@ -2177,7 +2225,8 @@ inline void drawSecondServiceLine() {
 
 void drawCydServicePanel(bool showVia) {
   blankArea(0,LINE1,SCREEN_WIDTH,LINE3-LINE1);
-  drawPrimaryService(showVia);
+  if (isScrollingCydPrimaryService) drawCydPrimaryServiceTransition(showVia);
+  else drawPrimaryService(showVia);
   if (station.numServices > 1) {
     if (cydSecondaryServiceIndex <= 0 || cydSecondaryServiceIndex >= station.numServices) {
       cydSecondaryServiceIndex = 1;
@@ -2266,6 +2315,7 @@ void drawServiceLine(int line, int y) {
 void drawStationBoard() {
 #if defined(DISPLAY_CYD)
   u8g2.setFontPosBaseline();
+  const bool initialBoardLoad = firstLoad;
 #endif
   if (showClockNoServices && station.numServices == 0) {
     if (!noServiceClockIsActive) firstLoad = true;
@@ -2309,6 +2359,7 @@ void drawStationBoard() {
     viaTimer=millis()+300000;  // effectively don't check for via
     if (station.numServices) {
 #if defined(DISPLAY_CYD)
+      if (initialBoardLoad) beginCydPrimaryServiceAnimation(nullptr,false,false);
       drawCydServicePanel(false);
 #else
       drawPrimaryService(false);
@@ -3599,10 +3650,20 @@ void departureBoardLoop() {
 
   if (fetchComplete && lastUpdateResult == UPD_SEC_CHANGE && !isScrollingService && !isSleeping) {
     fetchComplete = false;
+#if defined(DISPLAY_CYD)
+    const int previousPrimaryServiceCount = station.numServices;
+    const rdService previousPrimaryService = station.service[0];
+    const bool previousPrimaryPlatformAvailable = station.platformAvailable;
+    const bool previousPrimaryShowVia = isShowingVia;
+#endif
     updateRailDepartures();
     if (station.numServices) {
       if (!station.service[0].via[0]) isShowingVia=false;
 #if defined(DISPLAY_CYD)
+      if (previousPrimaryServiceCount == 0 || cydPrimaryServiceChanged(previousPrimaryService,previousPrimaryPlatformAvailable)) {
+        beginCydPrimaryServiceAnimation(previousPrimaryServiceCount ? &previousPrimaryService : nullptr,
+                                        previousPrimaryPlatformAvailable,previousPrimaryShowVia);
+      }
       drawCydServicePanel(isShowingVia);
       u8g2.updateDisplayArea(0, CYD_TILE_SERVICE_PANEL_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SERVICE_PANEL_H);
 #else
@@ -3633,7 +3694,20 @@ void departureBoardLoop() {
       // Get the update data if there is any
       if (lastUpdateResult == UPD_SUCCESS) {
         // Retrieve the updated data
+      #if defined(DISPLAY_CYD)
+        const int previousPrimaryServiceCount = station.numServices;
+        const rdService previousPrimaryService = station.service[0];
+        const bool previousPrimaryPlatformAvailable = station.platformAvailable;
+        const bool previousPrimaryShowVia = isShowingVia;
+      #endif
         updateRailDepartures();
+      #if defined(DISPLAY_CYD)
+        if (!firstLoad && station.numServices &&
+            (previousPrimaryServiceCount == 0 || cydPrimaryServiceChanged(previousPrimaryService,previousPrimaryPlatformAvailable))) {
+          beginCydPrimaryServiceAnimation(previousPrimaryServiceCount ? &previousPrimaryService : nullptr,
+                  previousPrimaryPlatformAvailable,previousPrimaryShowVia);
+        }
+      #endif
         drawStationBoard();
       } else if (lastUpdateResult == UPD_NO_CHANGE) {
         lastDataLoadTime = millis();
@@ -3673,8 +3747,13 @@ void departureBoardLoop() {
   // Check if there's a via destination
   if (millis()>viaTimer) {
     if (station.numServices && station.service[0].via[0] && !isSleeping && lastUpdateResult!=UPD_UNAUTHORISED && lastUpdateResult!=UPD_DATA_ERROR) {
+    #if defined(DISPLAY_CYD)
+      const rdService previousPrimaryService = station.service[0];
+      const bool previousPrimaryShowVia = isShowingVia;
+    #endif
       isShowingVia = !isShowingVia;
 #if defined(DISPLAY_CYD)
+      beginCydPrimaryServiceAnimation(&previousPrimaryService,station.platformAvailable,previousPrimaryShowVia);
       drawCydServicePanel(isShowingVia);
       u8g2.updateDisplayArea(0, CYD_TILE_SERVICE_PANEL_Y, CYD_NATIVE_TILE_WIDTH, CYD_TILE_SERVICE_PANEL_H);
 #else
@@ -3687,6 +3766,19 @@ void departureBoardLoop() {
 
 #if defined(DISPLAY_CYD)
   if (!isSleeping && station.numServices) drawPrimaryServiceMessage();
+
+  if (isScrollingCydPrimaryService && !isSleeping && !noServiceClockIsActive && station.numServices) {
+    drawCydPrimaryServiceTransition(isShowingVia);
+    cydPrimaryServiceScrollY -= 4;
+    if (cydPrimaryServiceScrollY <= 0) {
+      cydPrimaryServiceScrollY = 0;
+      isScrollingCydPrimaryService = false;
+      cydPrimaryServiceHasPrevious = false;
+      blankArea(0,LINE1,SCREEN_WIDTH,CYD_PRIMARY_SERVICE_SCROLL_DISTANCE);
+      drawPrimaryServiceAt(station.service[0],station.platformAvailable,isShowingVia,LINE1);
+    }
+    u8g2.updateDisplayArea(0,CYD_TILE_PRIMARY_SERVICE_Y,CYD_NATIVE_TILE_WIDTH,CYD_TILE_PRIMARY_SERVICE_H);
+  }
 #endif
 
   if (millis()>serviceTimer && !isScrollingService && !isSleeping && !noServiceClockIsActive && !noDataLoaded && lastUpdateResult!=UPD_UNAUTHORISED && lastUpdateResult!=UPD_DATA_ERROR) {
