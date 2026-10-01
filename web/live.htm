@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Departures Board - Live</title>
+  <link rel="icon" href="/favicon.png">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; color: #ddd; font: 14px Verdana, sans-serif; }
+    main { height: 100vh; height: 100dvh; padding: 16px; display: grid; grid-template-rows: minmax(0, 1fr) 24px; gap: 8px; }
+    #screenshot { width: 100%; height: 100%; min-height: 0; object-fit: contain; image-rendering: pixelated; }
+    #screenshot:not([src]) { visibility: hidden; }
+    #status { margin: 0; text-align: center; line-height: 24px; }
+  </style>
+</head>
+<body>
+  <main aria-label="Departures Board live display">
+    <img id="screenshot" alt="Current departures board">
+    <p id="status" role="status">Connecting...</p>
+  </main>
+  <script>
+    const screenshot = document.getElementById('screenshot');
+    const status = document.getElementById('status');
+    let currentUrl;
+    let refreshing = false;
+
+    async function refreshScreenshot() {
+      if (refreshing) return;
+      refreshing = true;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let nextUrl;
+      try {
+        const response = await fetch('/screenshot.bmp?t=' + Date.now(), {
+          cache: 'no-store',
+          credentials: 'omit',
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error('Screenshot unavailable');
+        nextUrl = URL.createObjectURL(await response.blob());
+        const nextImage = new Image();
+        nextImage.src = nextUrl;
+        await nextImage.decode();
+        screenshot.src = nextUrl;
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        currentUrl = nextUrl;
+        nextUrl = undefined;
+        status.textContent = '';
+      } catch {
+        status.textContent = currentUrl ? 'Connection lost. Retrying...' : 'Board unavailable. Retrying...';
+      } finally {
+        if (nextUrl) URL.revokeObjectURL(nextUrl);
+        clearTimeout(timeout);
+        refreshing = false;
+      }
+    }
+
+    refreshScreenshot();
+    setInterval(refreshScreenshot, 10000);
+  </script>
+</body>
+</html>

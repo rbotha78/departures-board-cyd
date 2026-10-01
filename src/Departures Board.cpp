@@ -56,6 +56,7 @@
 #include <touchSensor.h>
 #include <webgui/webgraphics.h>
 #include <webgui/index.h>
+#include <webgui/live.h>
 #include <webgui/keys.h>
 #include <webgui/editrss.h>
 #include <webgui/rss.h>
@@ -4659,7 +4660,7 @@ void setup(void) {
   server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
     if (webPassword[0] != '\0') {
       const String &url = request->url();
-      bool isPublic = (url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
+      bool isPublic = (url == "/live" || url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
                        url == "/favicon.png" || url == "/irail.webp" || url == "/itube.webp" ||
                        url == "/ibus.webp" || url == "/nrelogo.webp" || url == "/rdglogo.webp" ||
                        url == "/tfllogo.webp" || url == "/btlogo.webp" || url == "/tube.webp" ||
@@ -4695,6 +4696,7 @@ void setup(void) {
 #endif
   server.on("/screenshot.bmp", HTTP_GET, [](AsyncWebServerRequest *request){handleScreenshot(request);});
   server.on("/screenshot", HTTP_GET, [](AsyncWebServerRequest *request){handleScreenshot(request);});
+  server.on("/live", HTTP_GET, [](AsyncWebServerRequest *request){handleStreamGzipFlashFile("/live.htm",livehtm,sizeof(livehtm),request);});
   server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request){handleOtaUpdate(request);});
   server.on("/control", HTTP_GET, [](AsyncWebServerRequest *request){handleControl(request);});
   server.on("/success", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,contentTypeHtml,successPage);});

@@ -27,6 +27,7 @@ A model railway (00 gauge) version of this project is also available [here](http
 * Optionally display RSS headline feeds with UK news, sports and rail news
 * RSS Feed Editor to add custom headline feeds
 * Fully-featured browser based configuration screens - choose any station on the UK network / London Tube & DLR network / UK Bus Stops
+* Public live display at `http://<board-ip>/live`, refreshing the screenshot every 10 seconds without requiring a login. Available on both OLED and CYD; configuration screens retain their existing authentication.
 * Automatic firmware updates (optional)
 * Displays the weather at the selected location (optional)
 * Full-screen, Network SouthEast style station clock (optional)
