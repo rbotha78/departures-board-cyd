@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Departures Board</title>
+  <link rel="icon" href="/favicon.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --panel: #111;
+      --line: #2a2a2a;
+      --amber: #ffb000;
+      --dim: #b08020;
+      --text: #f2f2f2;
+      --muted: #9a9a9a;
+      --bad: #ff5a4f;
+      --warn: #ffd166;
+      --good: #6fdc8c;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 24px max(12px, env(safe-area-inset-left)); }
+    header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; padding: 8px 0 12px; border-bottom: 2px solid var(--amber); }
+    h1 { margin: 0; color: var(--amber); font-size: clamp(1.4rem, 5vw, 2.2rem); line-height: 1.15; overflow-wrap: anywhere; }
+    .sub { margin-top: 4px; color: var(--muted); font-size: .95rem; }
+    .mode { display: inline-block; padding: 1px 8px; margin-right: 6px; border: 1px solid var(--dim); border-radius: 999px; color: var(--amber); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+    #clock { color: var(--amber); font: 700 clamp(1.6rem, 6vw, 2.4rem)/1 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    #status { min-height: 1.4em; margin: 10px 0; color: var(--muted); font-size: .9rem; }
+    #status.warn { color: var(--warn); }
+    #status.bad { color: var(--bad); }
+
+    .board { list-style: none; margin: 0; padding: 0; }
+    .head { display: none; }
+    .row { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "time dest status" "time meta plat"; gap: 2px 12px; align-items: baseline; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+    .time { grid-area: time; color: var(--amber); font: 700 1.15rem ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; min-width: 3.4em; }
+    .dest { grid-area: dest; font-weight: 600; font-size: 1.1rem; overflow-wrap: anywhere; }
+    .meta { grid-area: meta; color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+    .plat { grid-area: plat; color: var(--muted); font-size: .88rem; text-align: right; white-space: nowrap; }
+    .row .plat:not(:empty)::before { content: "Plat "; }
+    .status { grid-area: status; text-align: right; white-space: nowrap; font-weight: 600; color: var(--good); }
+    .status.late { color: var(--warn); }
+    .status.cancelled { color: var(--bad); }
+    .row.cancelled .dest { text-decoration: line-through; color: var(--muted); }
+    .tag { display: inline-block; padding: 0 6px; margin-left: 6px; border: 1px solid var(--dim); border-radius: 4px; color: var(--amber); font-size: .75rem; font-weight: 400; vertical-align: middle; }
+    .empty { padding: 32px 4px; color: var(--muted); text-align: center; }
+
+    .info { display: grid; gap: 12px; margin-top: 20px; }
+    .card { padding: 12px 14px; background: var(--panel); border-left: 3px solid var(--amber); border-radius: 4px; overflow-wrap: anywhere; }
+    .card h2 { margin: 0 0 4px; color: var(--amber); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+    .card p { margin: 4px 0 0; }
+    footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 24px; color: var(--muted); font-size: .85rem; }
+    a { color: var(--amber); }
+
+    @media (min-width: 600px) {
+      .head, .row { grid-template-columns: 5.5rem minmax(0, 1fr) 4.5rem 8rem; grid-template-areas: "time dest plat status" "time meta plat status"; }
+      .head { display: grid; grid-template-areas: "time dest plat status"; padding: 8px 4px; color: var(--amber); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--dim); }
+      .head .plat, .row .plat { text-align: center; color: var(--text); font-size: 1rem; }
+      .row .plat:not(:empty)::before { content: none; }
+      .head .time, .head .dest, .head .plat, .head .status { font: inherit; color: inherit; font-weight: 600; }
+      .row { align-items: center; }
+      .info { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+      .no-plat .head, .no-plat .row { grid-template-columns: 5.5rem minmax(0, 1fr) 0 8rem; column-gap: 0; }
+      .no-plat .dest, .no-plat .meta { padding: 0 12px; }
+      .no-plat .plat { visibility: hidden; }
+    }
+    @media (min-width: 1000px) {
+      body { font-size: 18px; }
+      .row { padding: 14px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1 id="location">Departures Board</h1>
+        <div class="sub"><span id="mode" class="mode" hidden></span><span id="filter"></span></div>
+      </div>
+      <div id="clock" aria-label="Board time"></div>
+    </header>
+    <p id="status" role="status">Connecting...</p>
+    <section id="boardWrap" aria-label="Departures">
+      <div class="head" aria-hidden="true">
+        <span class="time" id="hTime">Time</span><span class="dest">Destination</span><span class="plat" id="hPlat">Plat</span><span class="status">Status</span>
+      </div>
+      <ul class="board" id="board"></ul>
+    </section>
+    <section class="info" id="info" aria-label="Service information"></section>
+    <footer>
+      <span id="updated"></span>
+      <a href="/live">Live display view</a>
+    </footer>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const MODES = { rail: 'National Rail', tube: 'Underground', bus: 'Bus' };
+    const POLL_MS = 30000;
+    const STALE_SEC = 180;
+    let clockBase = null;
+    let lastOk = 0;
+    let busy = false;
+
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined && text !== null) e.textContent = text;
+      return e;
+    }
+    const isTime = (s) => /^\d{1,2}:\d{2}$/.test(s || '');
+
+    function railStatus(s) {
+      if (s.cancelled) return ['Cancelled', 'cancelled'];
+      if (isTime(s.expected)) return ['Exp ' + s.expected, 'late'];
+      if (s.delayed || /delay/i.test(s.expected)) return [s.expected || 'Delayed', 'late'];
+      return [s.expected || '', ''];
+    }
+    function tubeStatus(s) {
+      if (s.dueSec <= 40) return ['Due', ''];
+      const m = Math.round(s.dueSec / 60);
+      return [m + (m === 1 ? ' min' : ' mins'), ''];
+    }
+    function busStatus(s) {
+      if (isTime(s.expected) && s.expected !== s.time) return ['Exp ' + s.expected, 'late'];
+      return [isTime(s.expected) ? 'On time' : (s.expected || ''), ''];
+    }
+
+    function renderRow(d, s, i) {
+      const li = el('li', 'row');
+      let first, meta = [], plat = '', status;
+      const dest = el('div', 'dest', s.destination);
+      if (d.mode === 'rail') {
+        first = s.time;
+        if (s.bus) dest.append(el('span', 'tag', 'Bus'));
+        if (s.via) meta.push(s.via);
+        if (s.operator) meta.push(s.operator);
+        if (s.coaches > 0) meta.push(s.coaches + ' coaches');
+        plat = s.platform || '';
+        status = railStatus(s);
+        if (s.cancelled) li.classList.add('cancelled');
+      } else if (d.mode === 'tube') {
+        first = String(i + 1);
+        if (s.line) meta.push(s.line);
+        if (i === 0 && d.currentLocation) meta.push(d.currentLocation);
+        status = tubeStatus(s);
+      } else {
+        first = s.route;
+        if (s.time) meta.push('Scheduled ' + s.time);
+        status = busStatus(s);
+      }
+      li.append(el('div', 'time', first), dest, el('div', 'meta', meta.join(' \u00b7 ')),
+        el('div', 'plat', plat),
+        el('div', 'status ' + status[1], status[0]));
+      return li;
+    }
+
+    function card(title, text) {
+      const c = el('div', 'card');
+      c.append(el('h2', null, title), el('p', null, text));
+      return c;
+    }
+
+    function render(d) {
+      $('location').textContent = d.location || 'Departures Board';
+      document.title = (d.location ? d.location + ' - ' : '') + 'Departures Board';
+      $('mode').textContent = MODES[d.mode] || d.mode;
+      $('mode').hidden = false;
+      const filters = [];
+      if (d.filter) filters.push((d.mode === 'rail' ? 'Platforms ' : 'Routes ') + d.filter);
+      if (d.callingFilter) filters.push('Calling at ' + d.callingFilter);
+      $('filter').textContent = filters.join(' \u00b7 ');
+      $('hTime').textContent = d.mode === 'tube' ? '#' : d.mode === 'bus' ? 'Route' : 'Time';
+      $('boardWrap').classList.toggle('no-plat', !d.platforms);
+
+      const board = $('board');
+      const rows = (d.services || []).map((s, i) => renderRow(d, s, i));
+      if (!rows.length) rows.push(el('li', 'empty', d.hasData ? 'No departures currently listed.' : 'Waiting for departure data...'));
+      board.replaceChildren(...rows);
+
+      const info = [];
+      if (d.calling) info.push(card('Next service', d.calling + (d.origin ? ' (from ' + d.origin + ')' : '')));
+      if (d.serviceMessage) info.push(card('Service notice', d.serviceMessage));
+      (d.messages || []).forEach((m) => { if (m) info.push(card('Station notice', m)); });
+      if (d.weather) info.push(card('Weather', d.weather));
+      $('info').replaceChildren(...info);
+
+      if (d.timeValid && /^\d{2}:\d{2}:\d{2}$/.test(d.time)) {
+        const [h, m, s] = d.time.split(':').map(Number);
+        clockBase = { secs: h * 3600 + m * 60 + s, at: performance.now() };
+      } else {
+        clockBase = null;
+      }
+      tick();
+
+      const status = $('status');
+      status.className = '';
+      if (d.sleeping) {
+        status.textContent = 'Board is sleeping; data updates are paused.';
+      } else if (!d.hasData) {
+        status.textContent = 'Board has not loaded data yet (' + d.result + ').';
+        status.className = 'warn';
+      } else if (d.ageSec > STALE_SEC) {
+        status.textContent = 'Data may be out of date (last update ' + Math.round(d.ageSec / 60) + ' min ago, ' + d.result + ').';
+        status.className = 'warn';
+      } else {
+        status.textContent = '';
+      }
+      $('updated').textContent = d.hasData && d.ageSec !== null ? 'Board data updated ' + d.ageSec + 's ago' : '';
+    }
+
+    function tick() {
+      if (!clockBase) { $('clock').textContent = ''; return; }
+      const t = Math.floor(clockBase.secs + (performance.now() - clockBase.at) / 1000) % 86400;
+      const p = (n) => String(n).padStart(2, '0');
+      $('clock').textContent = p(Math.floor(t / 3600)) + ':' + p(Math.floor(t / 60) % 60) + ':' + p(t % 60);
+    }
+
+    async function refresh() {
+      if (busy) return;
+      busy = true;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const r = await fetch('/departures.json?t=' + Date.now(), { cache: 'no-store', credentials: 'omit', signal: controller.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        render(await r.json());
+        lastOk = Date.now();
+      } catch {
+        const status = $('status');
+        status.className = 'bad';
+        status.textContent = lastOk ? 'Connection lost. Showing data from ' + Math.round((Date.now() - lastOk) / 1000) + 's ago. Retrying...' : 'Board unavailable. Retrying...';
+      } finally {
+        clearTimeout(timer);
+        busy = false;
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    setInterval(tick, 1000);
+    setInterval(refresh, POLL_MS);
+    refresh();
+  </script>
+</body>
+</html>

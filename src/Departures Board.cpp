@@ -57,6 +57,7 @@
 #include <webgui/webgraphics.h>
 #include <webgui/index.h>
 #include <webgui/live.h>
+#include <webgui/departures.h>
 #include <webgui/keys.h>
 #include <webgui/editrss.h>
 #include <webgui/rss.h>
@@ -3381,6 +3382,144 @@ String getResultCodeText(int resultCode) {
   }
 }
 
+// JSON-escape a bounded string; bytes that are not valid UTF-8 are emitted as Latin-1 code points.
+static void writeJsonString(Print &out, const char *s, size_t maxLen) {
+  out.write('"');
+  const size_t len = strnlen(s, maxLen);
+  for (size_t i = 0; i < len; i++) {
+    const uint8_t c = (uint8_t)s[i];
+    if (c == '"' || c == '\\') {
+      out.write('\\');
+      out.write(c);
+    } else if (c < 0x20 || c == 0x7F) {
+      out.printf("\\u%04x", c);
+    } else if (c < 0x80) {
+      out.write(c);
+    } else {
+      size_t n = ((c & 0xE0) == 0xC0) ? 2 : ((c & 0xF0) == 0xE0) ? 3 : ((c & 0xF8) == 0xF0) ? 4 : 0;
+      bool valid = n && c >= 0xC2 && c <= 0xF4 && i + n <= len;
+      for (size_t j = 1; valid && j < n; j++) valid = ((uint8_t)s[i + j] & 0xC0) == 0x80;
+      if (valid) {
+        const uint8_t c1 = (uint8_t)s[i + 1];
+        if ((c == 0xE0 && c1 < 0xA0) || (c == 0xED && c1 >= 0xA0) || (c == 0xF0 && c1 < 0x90) || (c == 0xF4 && c1 >= 0x90)) valid = false;
+      }
+      if (valid) {
+        out.write((const uint8_t *)s + i, n);
+        i += n - 1;
+      } else {
+        out.printf("\\u%04x", c);
+      }
+    }
+  }
+  out.write('"');
+}
+
+static void writeJsonField(Print &out, const char *key, const char *value, size_t maxLen) {
+  out.printf(",\"%s\":", key);
+  writeJsonString(out, value, maxLen);
+}
+
+// Public JSON snapshot of the active board for the responsive web view
+void handleDeparturesJson(AsyncWebServerRequest *request) {
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 20000) {
+    AsyncWebServerResponse *busy = request->beginResponse(503, contentTypeJson, "{\"error\":\"busy\"}");
+    busy->addHeader("Retry-After", "10");
+    busy->addHeader("Cache-Control", "no-store");
+    busy->addHeader("X-Content-Type-Options", "nosniff");
+    request->send(busy);
+    return;
+  }
+
+  AsyncResponseStream *out = request->beginResponseStream(contentTypeJson, 6144);
+  out->addHeader("Cache-Control", "no-store");
+  out->addHeader("X-Content-Type-Options", "nosniff");
+
+  const boardModes mode = boardMode;
+  const bool validMode = (mode == MODE_RAIL || mode == MODE_TUBE || mode == MODE_BUS);
+  const bool hasData = validMode && !noDataLoaded;
+  const char *modeName = (mode == MODE_TUBE) ? "tube" : (mode == MODE_BUS) ? "bus" : "rail";
+
+  struct tm now;
+  const bool timeValid = getLocalTime(&now, 0) && now.tm_year > 120;
+  char timeStr[9] = "";
+  char dateStr[11] = "";
+  if (timeValid) {
+    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &now);
+    strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &now);
+  }
+
+  const int result = lastUpdateResult;
+  out->printf("{\"mode\":\"%s\"", modeName);
+  const bool railName = (mode == MODE_RAIL) && hasData && station.location[0];
+  writeJsonField(*out, "location", railName ? station.location : locationName, MAXLOCATIONSIZE);
+  writeJsonField(*out, "filter", (mode == MODE_TUBE) ? "" : locationFilter, sizeof(locationFilter));
+  writeJsonField(*out, "callingFilter", (mode == MODE_RAIL) ? callingStation : "", sizeof(callingStation));
+  out->printf(",\"hasData\":%s,\"sleeping\":%s,\"timeValid\":%s", hasData ? "true" : "false", isSleeping ? "true" : "false", timeValid ? "true" : "false");
+  writeJsonField(*out, "time", timeStr, sizeof(timeStr));
+  writeJsonField(*out, "date", dateStr, sizeof(dateStr));
+  if (hasData) out->printf(",\"ageSec\":%lu", (millis() - lastDataLoadTime) / 1000UL);
+  else out->print(",\"ageSec\":null");
+  out->printf(",\"resultCode\":%d", result);
+  writeJsonField(*out, "result", getResultCodeText(result).c_str(), MAXRESULTMESSAGESIZE);
+
+  const bool showPlatforms = (mode == MODE_RAIL) && station.platformAvailable && !hidePlatform;
+  out->printf(",\"platforms\":%s,\"services\":[", showPlatforms ? "true" : "false");
+  const int numServices = hasData ? constrain(station.numServices, 0, MAXBOARDSERVICES) : 0;
+  for (int i = 0; i < numServices; i++) {
+    rdService s;
+    memcpy(&s, &station.service[i], sizeof(s));
+    out->print(i ? ",{" : "{");
+    if (mode == MODE_RAIL) {
+      out->print("\"time\":");
+      writeJsonString(*out, s.sTime, sizeof(s.sTime));
+      writeJsonField(*out, "destination", s.destination, sizeof(s.destination));
+      writeJsonField(*out, "via", s.via, sizeof(s.via));
+      writeJsonField(*out, "expected", s.etd, sizeof(s.etd));
+      writeJsonField(*out, "platform", (showPlatforms && s.serviceType == TRAIN) ? s.platform : "", sizeof(s.platform));
+      writeJsonField(*out, "operator", s.opco, sizeof(s.opco));
+      out->printf(",\"cancelled\":%s,\"delayed\":%s,\"coaches\":%d,\"bus\":%s", s.isCancelled ? "true" : "false", s.isDelayed ? "true" : "false", s.trainLength, (s.serviceType == BUS) ? "true" : "false");
+    } else if (mode == MODE_TUBE) {
+      out->print("\"line\":");
+      writeJsonString(*out, s.via, sizeof(s.via));
+      writeJsonField(*out, "destination", s.destination, sizeof(s.destination));
+      out->printf(",\"dueSec\":%d", s.timeToStation);
+    } else {
+      out->print("\"route\":");
+      writeJsonString(*out, s.via, sizeof(s.via));
+      writeJsonField(*out, "destination", s.destination, sizeof(s.destination));
+      writeJsonField(*out, "time", s.sTime, sizeof(s.sTime));
+      writeJsonField(*out, "expected", s.etd, sizeof(s.etd));
+    }
+    out->print("}");
+  }
+  out->print("]");
+
+  if (numServices && mode == MODE_RAIL) {
+    writeJsonField(*out, "calling", station.calling, sizeof(station.calling));
+    writeJsonField(*out, "origin", station.origin, sizeof(station.origin));
+    writeJsonField(*out, "serviceMessage", station.serviceMessage, sizeof(station.serviceMessage));
+  } else if (numServices && mode == MODE_TUBE) {
+    writeJsonField(*out, "currentLocation", station.origin, sizeof(station.origin));
+  }
+
+  // Bus data never updates station messages; TfL appends an attribution entry last
+  int numMessages = 0;
+  if (hasData && mode != MODE_BUS) {
+    numMessages = constrain(messages.numMessages, 0, MAXBOARDMESSAGES);
+    if (mode == MODE_TUBE && numMessages && strncmp(messages.messages[numMessages - 1], "Powered by TfL", 14) == 0) numMessages--;
+  }
+  out->print(",\"messages\":[");
+  for (int i = 0; i < numMessages; i++) {
+    if (i) out->print(",");
+    writeJsonString(*out, messages.messages[i], sizeof(messages.messages[i]));
+  }
+  out->print("]");
+
+  writeJsonField(*out, "weather", weatherEnabled ? weatherMsg : "", sizeof(weatherMsg));
+  out->print("}");
+  request->send(out);
+}
+
 // Send some useful system & station information to the browser
 void handleInfo(AsyncWebServerRequest *request) {
   unsigned long uptime = millis();
@@ -4660,7 +4799,7 @@ void setup(void) {
   server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
     if (webPassword[0] != '\0') {
       const String &url = request->url();
-      bool isPublic = (url == "/live" || url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
+      bool isPublic = (url == "/live" || url == "/departures" || url == "/departures.json" || url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
                        url == "/favicon.png" || url == "/irail.webp" || url == "/itube.webp" ||
                        url == "/ibus.webp" || url == "/nrelogo.webp" || url == "/rdglogo.webp" ||
                        url == "/tfllogo.webp" || url == "/btlogo.webp" || url == "/tube.webp" ||
@@ -4697,6 +4836,8 @@ void setup(void) {
   server.on("/screenshot.bmp", HTTP_GET, [](AsyncWebServerRequest *request){handleScreenshot(request);});
   server.on("/screenshot", HTTP_GET, [](AsyncWebServerRequest *request){handleScreenshot(request);});
   server.on("/live", HTTP_GET, [](AsyncWebServerRequest *request){handleStreamGzipFlashFile("/live.htm",livehtm,sizeof(livehtm),request);});
+  server.on("/departures", HTTP_GET, [](AsyncWebServerRequest *request){handleStreamGzipFlashFile("/departures.htm",departureshtm,sizeof(departureshtm),request);});
+  server.on("/departures.json", HTTP_GET, [](AsyncWebServerRequest *request){handleDeparturesJson(request);});
   server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request){handleOtaUpdate(request);});
   server.on("/control", HTTP_GET, [](AsyncWebServerRequest *request){handleControl(request);});
   server.on("/success", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,contentTypeHtml,successPage);});
