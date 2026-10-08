@@ -1485,7 +1485,7 @@ void writeDefaultConfig() {
   bool defaultTouch = false;
   #endif
 
-  String defaultConfig = "{\"crs\":\"\",\"station\":\"\",\"lat\":0,\"lon\":0,\"weather\":true,\"sleep\":false,\"showDate\":false,\"showBus\":false,\"update\":true,\"sleepStarts\":23,\"sleepEnds\":8,\"brightness\":" + String(defaultBrightness) + ",\"touch\":" + String(defaultTouch ? "true" : "false") + ",\"displayColor\":0,\"displayScale\":0,\"tubeId\":\"\",\"tubeName\":\"\",\"mode\":" + String((!nrToken[0] && rdmDeparturesApiKey=="")?"1":"0") + "}";
+  String defaultConfig = "{\"crs\":\"\",\"station\":\"\",\"lat\":0,\"lon\":0,\"weather\":true,\"sleep\":false,\"showDate\":false,\"showBus\":false,\"update\":true,\"sleepStarts\":23,\"sleepEnds\":8,\"brightness\":" + String(defaultBrightness) + ",\"touch\":" + String(defaultTouch ? "true" : "false") + ",\"webAutoScroll\":true,\"webAutoScrollSpeed\":60,\"displayColor\":0,\"displayScale\":0,\"tubeId\":\"\",\"tubeName\":\"\",\"mode\":" + String((!nrToken[0] && rdmDeparturesApiKey=="")?"1":"0") + "}";
   saveFile("/config.json",defaultConfig);
   strcpy(webPassword, "");
   strcpy(webUsername, "admin");
@@ -4799,7 +4799,7 @@ void setup(void) {
   server.addMiddleware([](AsyncWebServerRequest *request, ArMiddlewareNext next) {
     if (webPassword[0] != '\0') {
       const String &url = request->url();
-      bool isPublic = (url == "/live" || url == "/departures" || url == "/departures.json" || url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
+      bool isPublic = (url == "/live" || url == "/departures" || url == "/departures.json" || url == "/websettings.json" || url == "/screenshot.bmp" || url == "/screenshot" || url == "/info" ||
                        url == "/favicon.png" || url == "/irail.webp" || url == "/itube.webp" ||
                        url == "/ibus.webp" || url == "/nrelogo.webp" || url == "/rdglogo.webp" ||
                        url == "/tfllogo.webp" || url == "/btlogo.webp" || url == "/tube.webp" ||
@@ -4838,6 +4838,30 @@ void setup(void) {
   server.on("/live", HTTP_GET, [](AsyncWebServerRequest *request){handleStreamGzipFlashFile("/live.htm",livehtm,sizeof(livehtm),request);});
   server.on("/departures", HTTP_GET, [](AsyncWebServerRequest *request){handleStreamGzipFlashFile("/departures.htm",departureshtm,sizeof(departureshtm),request);});
   server.on("/departures.json", HTTP_GET, [](AsyncWebServerRequest *request){handleDeparturesJson(request);});
+  server.on("/websettings.json", HTTP_GET, [](AsyncWebServerRequest *request) {
+    File file = LittleFS.open("/config.json", "r");
+    if (!file) {
+      request->send(500, contentTypeJson, "{\"error\":\"Unable to read board settings\"}");
+      return;
+    }
+
+    JsonDocument config;
+    DeserializationError error = deserializeJson(config, file);
+    file.close();
+    if (error) {
+      request->send(500, contentTypeJson, "{\"error\":\"Unable to parse board settings\"}");
+      return;
+    }
+
+    JsonDocument webSettings;
+    webSettings["webAutoScroll"] = config["webAutoScroll"].is<bool>() ? config["webAutoScroll"].as<bool>() : true;
+    int speed = config["webAutoScrollSpeed"].is<int>() ? config["webAutoScrollSpeed"].as<int>() : 60;
+    webSettings["webAutoScrollSpeed"] = speed < 10 ? 10 : (speed > 120 ? 120 : speed);
+
+    String response;
+    serializeJson(webSettings, response);
+    request->send(200, contentTypeJson, response);
+  });
   server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request){handleOtaUpdate(request);});
   server.on("/control", HTTP_GET, [](AsyncWebServerRequest *request){handleControl(request);});
   server.on("/success", HTTP_GET, [](AsyncWebServerRequest *request){request->send(200,contentTypeHtml,successPage);});

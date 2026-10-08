@@ -240,6 +240,25 @@
                 <div class="py-3">
                   <div class="d-flex justify-content-between align-items-center">
                     <div>
+                      <label class="form-check-label d-block" for="webAutoScroll">Auto-scroll long web departures lists</label>
+                      <div class="small text-body-secondary">Applies to the large-screen web display only.</div>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                      <input class="form-check-input" type="checkbox" id="webAutoScroll" role="switch">
+                    </div>
+                  </div>
+                  <div class="mt-2">
+                    <label class="form-label" for="webAutoScrollSpeed">Auto-scroll speed: <span id="webAutoScrollSpeedValue">60</span> px/s</label>
+                    <input type="range" min="10" max="120" step="5" value="60" class="form-range" id="webAutoScrollSpeed">
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <hr class="my-0 opacity-10">
+                <div class="py-3">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <div>
                       <label class="form-check-label d-block" for="showDate">Show the date on screen</label>
                     </div>
                     <div class="form-check form-switch mb-0">
@@ -870,6 +889,8 @@
       brightness: document.getElementById("brightness"),
       displayColor: document.getElementById("displayColor"),
       displayScale: document.getElementById("displayScale"),
+      webAutoScroll: document.getElementById("webAutoScroll"),
+      webAutoScrollSpeed: document.getElementById("webAutoScrollSpeed"),
       enableSleep: document.getElementById("enableSleep"),
       sleepStart: document.getElementById("sleepStart"),
       sleepEnd: document.getElementById("sleepEnd"),
@@ -1335,6 +1356,8 @@
     elements.brightness.addEventListener("change", handleBrightnessChange);
     elements.displayColor.addEventListener("change", handleDisplaySettingsChange);
     elements.displayScale.addEventListener("change", handleDisplaySettingsChange);
+    elements.webAutoScroll.addEventListener("change", () => { elements.webAutoScrollSpeed.disabled = !elements.webAutoScroll.checked; });
+    elements.webAutoScrollSpeed.addEventListener("input", () => { document.getElementById("webAutoScrollSpeedValue").textContent = elements.webAutoScrollSpeed.value; });
     elements.clearButton.addEventListener("click", handleClearFilter);
     elements.verifyAtcoButton.addEventListener("click", handleVerifyAtco);
     elements.clearHistoryButton.addEventListener("click", handleClearHistory);
@@ -1863,6 +1886,10 @@
       elements.brightness.title = Math.round(pct) + "%";
       elements.displayColor.value = s.displayColor ?? 0;
       elements.displayScale.value = s.displayScale ?? 0;
+      setCheckbox("webAutoScroll", s.webAutoScroll ?? true);
+      elements.webAutoScrollSpeed.value = Math.min(120, Math.max(10, s.webAutoScrollSpeed ?? 60));
+      document.getElementById("webAutoScrollSpeedValue").textContent = elements.webAutoScrollSpeed.value;
+      elements.webAutoScrollSpeed.disabled = !elements.webAutoScroll.checked;
 
       if (appState.busName.length) elements.busLongName.innerHTML = "Location: <b>" + appState.busName + "</b>";
       toggleBusFilterBox();
@@ -2077,6 +2104,8 @@
       s.brightness = parseInt(elements.brightness.value);
       s.displayColor = parseInt(elements.displayColor.value);
       s.displayScale = parseInt(elements.displayScale.value);
+      s.webAutoScroll = elements.webAutoScroll.checked;
+      s.webAutoScrollSpeed = parseInt(elements.webAutoScrollSpeed.value);
       s.sleep = isChecked("enableSleep");
       s.darkSleep = isChecked("darkSleep");
       s.sleepUseBigClock = isChecked("sleepUseBigClock");

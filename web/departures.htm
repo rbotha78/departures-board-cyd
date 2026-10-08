@@ -48,7 +48,8 @@
     .tag { display: inline-block; padding: 0 6px; margin-left: 6px; border: 1px solid var(--dim); border-radius: 4px; color: var(--amber); font-size: .75rem; font-weight: 400; vertical-align: middle; }
     .empty { padding: 32px 4px; color: var(--muted); text-align: center; }
 
-    .info { display: grid; gap: 12px; margin-top: 20px; }
+    .priority-info, .info { display: grid; gap: 12px; margin-top: 20px; }
+    .priority-info:empty, .info:empty { display: none; }
     .card { padding: 12px 14px; background: var(--panel); border-left: 3px solid var(--amber); border-radius: 4px; overflow-wrap: anywhere; }
     .card h2 { margin: 0 0 4px; color: var(--amber); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
     .card p { margin: 4px 0 0; }
@@ -90,10 +91,19 @@
       .dest { font-size: 1.55rem; }
       .meta, .row .plat, .status { font-size: 1.1rem; }
       .empty { padding: 40px 12px; font-size: 1.4rem; }
-      .info { gap: 18px; margin-top: 28px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+      html, body { height: 100%; }
+      body { overflow: hidden; }
       .card { padding: 18px 20px; }
       .card h2 { font-size: 1rem; }
-      footer { gap: 12px; margin-top: 32px; font-size: .95rem; }
+      .wrap { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+      #boardWrap { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; overflow: hidden; }
+      #primaryService { flex: 0 0 auto; }
+      #serviceScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
+      #serviceScroll::-webkit-scrollbar { display: none; }
+      .priority-info, .info { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+      .priority-info { flex: 0 0 auto; gap: 12px 18px; margin-top: 12px; }
+      .info { flex: 0 1 auto; max-height: clamp(5rem, 16vh, 11rem); overflow-y: auto; align-content: start; gap: 12px 18px; margin-top: 12px; overscroll-behavior: contain; }
+      footer { flex: 0 0 auto; gap: 12px; margin-top: 12px; font-size: .95rem; }
       .no-plat .head, .no-plat .row { grid-template-columns: 7rem minmax(0, 1fr) 0 12rem; column-gap: 0; }
       .no-plat .dest, .no-plat .meta { padding: 0 20px; }
     }
@@ -113,8 +123,12 @@
       <div class="head" aria-hidden="true">
         <span class="time" id="hTime">Time</span><span class="dest">Destination</span><span class="plat" id="hPlat">Plat</span><span class="status">Status</span>
       </div>
-      <ul class="board" id="board"></ul>
+      <ul class="board" id="primaryService" aria-label="Next departure"></ul>
+      <div id="serviceScroll" tabindex="0" aria-label="Further departures">
+        <ul class="board" id="board"></ul>
+      </div>
     </section>
+    <section class="priority-info" id="priorityInfo" aria-label="Next service and weather"></section>
     <section class="info" id="info" aria-label="Service information"></section>
     <footer>
       <span id="updated"></span>
@@ -129,6 +143,15 @@
     let clockBase = null;
     let lastOk = 0;
     let busy = false;
+    let autoScrollEnabled = false;
+    let autoScrollSpeed = 60;
+    let webConfigError = '';
+    let autoScrollFrame = 0;
+    let autoScrollLast = 0;
+    let autoScrollDirection = 1;
+    let autoScrollPosition = 0;
+    let autoScrollPauseUntil = 0;
+    let autoScrollEdgePauseUntil = 0;
 
     function el(tag, cls, text) {
       const e = document.createElement(tag);
@@ -201,16 +224,25 @@
       $('hTime').textContent = d.mode === 'tube' ? '#' : d.mode === 'bus' ? 'Route' : 'Time';
       $('boardWrap').classList.toggle('no-plat', !d.platforms);
 
+      const services = d.services || [];
+      const primary = $('primaryService');
+      primary.replaceChildren(...(services.length ? [renderRow(d, services[0], 0)] : []));
+
       const board = $('board');
-      const rows = (d.services || []).map((s, i) => renderRow(d, s, i));
-      if (!rows.length) rows.push(el('li', 'empty', d.hasData ? 'No departures currently listed.' : 'Waiting for departure data...'));
+      const rows = services.slice(1).map((s, i) => renderRow(d, s, i + 1));
+      if (!services.length) rows.push(el('li', 'empty', d.hasData ? 'No departures currently listed.' : 'Waiting for departure data...'));
       board.replaceChildren(...rows);
+      autoScrollPosition = $('serviceScroll').scrollTop;
+      startAutoScroll();
+
+      const priorityInfo = [];
+      if (d.calling) priorityInfo.push(card('Next service', d.calling + (d.origin ? ' (from ' + d.origin + ')' : '')));
+      if (d.weather) priorityInfo.push(card('Weather', d.weather));
+      $('priorityInfo').replaceChildren(...priorityInfo);
 
       const info = [];
-      if (d.calling) info.push(card('Next service', d.calling + (d.origin ? ' (from ' + d.origin + ')' : '')));
       if (d.serviceMessage) info.push(card('Service notice', d.serviceMessage));
       (d.messages || []).forEach((m) => { if (m) info.push(card('Station notice', m)); });
-      if (d.weather) info.push(card('Weather', d.weather));
       $('info').replaceChildren(...info);
 
       if (d.timeValid && /^\d{2}:\d{2}:\d{2}$/.test(d.time)) {
@@ -223,7 +255,10 @@
 
       const status = $('status');
       status.className = '';
-      if (d.sleeping) {
+      if (webConfigError) {
+        status.textContent = webConfigError;
+        status.className = 'bad';
+      } else if (d.sleeping) {
         status.textContent = 'Board is sleeping; data updates are paused.';
       } else if (!d.hasData) {
         status.textContent = 'Board has not loaded data yet (' + d.result + ').';
@@ -235,6 +270,73 @@
         status.textContent = '';
       }
       $('updated').textContent = d.hasData && d.ageSec !== null ? 'Board data updated ' + d.ageSec + 's ago' : '';
+    }
+
+    function autoScrollServices(now) {
+      const scroller = $('serviceScroll');
+      if (!autoScrollEnabled || innerWidth < 1400 || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        autoScrollFrame = 0;
+        return;
+      }
+
+      const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+      if (maxScroll <= 1) {
+        autoScrollFrame = 0;
+        return;
+      }
+
+      if (autoScrollLast && now >= autoScrollPauseUntil && now >= autoScrollEdgePauseUntil) {
+        const elapsed = Math.min(now - autoScrollLast, 50);
+        autoScrollPosition += autoScrollDirection * elapsed * autoScrollSpeed / 1000;
+        if (autoScrollDirection > 0 && autoScrollPosition >= maxScroll) {
+          autoScrollPosition = maxScroll;
+          autoScrollDirection = -1;
+          autoScrollEdgePauseUntil = now + 1000;
+        } else if (autoScrollDirection < 0 && autoScrollPosition <= 0) {
+          autoScrollPosition = 0;
+          autoScrollDirection = 1;
+          autoScrollEdgePauseUntil = now + 1000;
+        }
+        scroller.scrollTop = autoScrollPosition;
+      } else if (now < autoScrollPauseUntil) {
+        autoScrollPosition = scroller.scrollTop;
+      }
+
+      autoScrollLast = now;
+      autoScrollFrame = requestAnimationFrame(autoScrollServices);
+    }
+
+    function startAutoScroll() {
+      if (!autoScrollFrame) autoScrollFrame = requestAnimationFrame(autoScrollServices);
+    }
+
+    function pauseAutoScroll() {
+      autoScrollPosition = $('serviceScroll').scrollTop;
+      autoScrollPauseUntil = performance.now() + 5000;
+    }
+
+    async function loadWebConfig() {
+      const response = await fetch('/websettings.json', { cache: 'no-store', credentials: 'omit' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const config = await response.json();
+      autoScrollEnabled = typeof config.webAutoScroll === 'boolean' ? config.webAutoScroll : true;
+      const speed = Number(config.webAutoScrollSpeed ?? 60);
+      autoScrollSpeed = Number.isFinite(speed) ? Math.min(120, Math.max(10, speed)) : 60;
+    }
+
+    async function updateWebConfig() {
+      try {
+        await loadWebConfig();
+        const hadError = webConfigError;
+        webConfigError = '';
+        startAutoScroll();
+        if (hadError) refresh();
+      } catch (error) {
+        autoScrollEnabled = false;
+        webConfigError = 'Could not load board settings for the web display: ' + error.message;
+        $('status').className = 'bad';
+        $('status').textContent = webConfigError;
+      }
     }
 
     function tick() {
@@ -265,9 +367,15 @@
     }
 
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    $('serviceScroll').addEventListener('wheel', pauseAutoScroll, { passive: true });
+    $('serviceScroll').addEventListener('pointerdown', pauseAutoScroll);
+    $('serviceScroll').addEventListener('touchstart', pauseAutoScroll, { passive: true });
+    $('serviceScroll').addEventListener('keydown', pauseAutoScroll);
+    window.addEventListener('resize', startAutoScroll);
     setInterval(tick, 1000);
     setInterval(refresh, POLL_MS);
-    refresh();
+    setInterval(updateWebConfig, POLL_MS);
+    updateWebConfig().finally(refresh);
   </script>
 </body>
 </html>
