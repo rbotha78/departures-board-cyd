@@ -71,6 +71,32 @@
       body { font-size: 18px; }
       .row { padding: 14px 6px; }
     }
+    @media (min-width: 1400px) {
+      html { font-size: clamp(18px, 1.25vw, 24px); }
+      body { font-size: 1rem; }
+      .wrap {
+        width: min(96vw, 1920px);
+        max-width: none;
+        padding: max(24px, env(safe-area-inset-top)) max(24px, 2vw, env(safe-area-inset-right)) 40px max(24px, 2vw, env(safe-area-inset-left));
+      }
+      header { gap: 16px 24px; padding: 16px 0 20px; }
+      h1 { font-size: clamp(2.2rem, 3.5vw, 3.5rem); }
+      #clock { font-size: clamp(2.8rem, 4vw, 4.2rem); }
+      #status { margin: 14px 0; }
+      .head, .row { grid-template-columns: 7rem minmax(0, 1fr) 6.5rem 12rem; column-gap: 20px; }
+      .head { padding: 12px; }
+      .row { gap: 6px 20px; padding: 22px 12px; }
+      .time { font-size: 1.5rem; }
+      .dest { font-size: 1.55rem; }
+      .meta, .row .plat, .status { font-size: 1.1rem; }
+      .empty { padding: 40px 12px; font-size: 1.4rem; }
+      .info { gap: 18px; margin-top: 28px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+      .card { padding: 18px 20px; }
+      .card h2 { font-size: 1rem; }
+      footer { gap: 12px; margin-top: 32px; font-size: .95rem; }
+      .no-plat .head, .no-plat .row { grid-template-columns: 7rem minmax(0, 1fr) 0 12rem; column-gap: 0; }
+      .no-plat .dest, .no-plat .meta { padding: 0 20px; }
+    }
   </style>
 </head>
 <body>
